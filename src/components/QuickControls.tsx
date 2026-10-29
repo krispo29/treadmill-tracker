@@ -114,27 +114,27 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
   const inclinePresets = [0, 2, 4, 6, 8, 10, 12, 16, 20];
 
   return (
-    <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-4 sm:p-5 space-y-4">
-      <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-          <span>🎮 Quick Controls (ควบคุมลู่วิ่งปรับละเอียด 0.1)</span>
+    <div className="rounded-3xl bg-white border border-[#EDE6DC] shadow-cozy p-5 sm:p-6 space-y-5">
+      <div className="flex items-center justify-between pb-3 border-b border-[#EDE6DC]">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-[#2C2621] flex items-center gap-2">
+          <span>🎮 Quick Controls (ควบคุมความเร็วละเอียด 0.1)</span>
         </h3>
-        <span className="text-[11px] text-slate-400 font-mono">
+        <span className="text-[11px] text-[#8C827A] font-mono">
           ปัจจุบัน: {currentSpeed.toFixed(1)} km/h | ชัน: {currentIncline}
         </span>
       </div>
 
       {/* Master Motor Controls: Start / Stop */}
-      <div className="grid grid-cols-2 gap-3 pt-1">
+      <div className="grid grid-cols-2 gap-3.5 pt-1">
         <button
           onClick={() => {
             const startSpd = targetSpeed >= 1.0 ? targetSpeed : defaultStartingSpeed;
             if (onStart) onStart(startSpd);
             else onSetSpeed(startSpd);
           }}
-          className="py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+          className="py-3 px-5 rounded-2xl text-xs sm:text-sm font-bold bg-[#52796F] hover:bg-[#43675E] text-white flex items-center justify-center gap-2 shadow-cozy-lg active:scale-95 transition-all cursor-pointer"
         >
-          <Play className="w-4 h-4 fill-slate-950" />
+          <Play className="w-4 h-4 fill-white" />
           <span>เริ่มเดิน (Start {targetSpeed >= 1.0 ? targetSpeed.toFixed(1) : defaultStartingSpeed.toFixed(1)})</span>
         </button>
 
@@ -143,33 +143,33 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
             if (onStop) onStop();
             else onSetSpeed(0);
           }}
-          className="py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-sm"
+          className="py-3 px-5 rounded-2xl text-xs sm:text-sm font-bold bg-[#FDF0F0] hover:bg-[#FBE4E4] text-[#B94A4A] border border-[#F4CECE] flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-cozy-sm"
         >
-          <Square className="w-4 h-4 fill-rose-300" />
+          <Square className="w-4 h-4 fill-[#B94A4A]" />
           <span>หยุดสายพาน (Stop)</span>
         </button>
       </div>
 
       {/* Runner's Personal Favorite Speeds (Phase 2) */}
       {activeProfile && (
-        <div className="p-3 rounded-2xl bg-slate-950/70 border border-amber-500/25 space-y-2.5 shadow-sm">
+        <div className="p-4 rounded-2xl bg-[#FFFDF9] border border-[#F2E5CE] space-y-3 shadow-cozy-sm">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-amber-300 flex items-center gap-1.5">
+            <span className="font-bold text-[#A66E22] flex items-center gap-1.5">
               <span>⭐ สปีดโปรดของ {activeProfile.name}</span>
             </span>
             {onUpdateFavorites && (
               <button
                 onClick={handleToggleFavorite}
-                className="text-[11px] text-slate-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                className="text-[11px] text-[#8C827A] hover:text-[#A66E22] flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
                 title={isCurrentSpeedFavorited ? 'ลบความเร็วนี้ออกจากสปีดโปรด' : 'บันทึกความเร็วนี้เป็นสปีดโปรด'}
               >
-                <Star className={`w-3.5 h-3.5 ${isCurrentSpeedFavorited ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
+                <Star className={`w-3.5 h-3.5 ${isCurrentSpeedFavorited ? 'fill-[#DDA15E] text-[#DDA15E]' : 'text-[#8C827A]'}`} />
                 <span>{isCurrentSpeedFavorited ? 'ลบออกจากสปีดโปรด' : `+ บันทึก ${targetSpeed.toFixed(1)} เป็นสปีดโปรด`}</span>
               </button>
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {favoriteSpeeds.map((spd) => {
               const info = getSpeedPillInfo(spd);
               const isSelected = Math.abs(targetSpeed - spd) < 0.05;
@@ -177,17 +177,17 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
                 <button
                   key={spd}
                   onClick={() => setDirectSpeed(spd)}
-                  className={`p-2 sm:p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer active:scale-95 shadow-sm ${
+                  className={`p-2.5 rounded-2xl border flex items-center justify-between transition-all cursor-pointer active:scale-95 shadow-cozy-sm ${
                     isSelected
-                      ? 'ring-2 ring-amber-400 bg-amber-500/20 border-amber-400 text-amber-200 shadow-amber-500/20'
-                      : info.color
+                      ? 'ring-2 ring-[#DDA15E] bg-[#FDF6EA] border-[#DDA15E] text-[#2C2621]'
+                      : 'bg-white hover:bg-[#FAF7F2] text-[#2C2621] border-[#EDE6DC]'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 truncate">
+                  <div className="flex items-center gap-2 truncate">
                     <span className="text-base leading-none">{info.icon}</span>
                     <span className="text-xs font-semibold truncate">{info.label}</span>
                   </div>
-                  <span className="text-sm font-black digital-number">
+                  <span className="text-sm font-black digital-number text-[#2C2621]">
                     {spd.toFixed(1)}
                   </span>
                 </button>
@@ -198,15 +198,15 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
       )}
 
       {/* Speed Controls with Decimal Fine-Tuning */}
-      <div className="space-y-2 pt-1">
+      <div className="space-y-2.5 pt-1">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-cyan-400 font-semibold flex items-center gap-1.5">
-            <Gauge className="w-3.5 h-3.5" />
+          <span className="text-[#52796F] font-bold flex items-center gap-1.5">
+            <Gauge className="w-4 h-4" />
             <span>ปรับสปีดละเอียด (ทศนิยม 0.1 km/h)</span>
           </span>
           <button
             onClick={() => setIsCustomSpeedOpen(!isCustomSpeedOpen)}
-            className="text-[11px] text-slate-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+            className="text-[11px] text-[#8C827A] hover:text-[#52796F] flex items-center gap-1 cursor-pointer font-medium"
           >
             <Edit3 className="w-3 h-3" />
             <span>พิมพ์ระบุตัวเลข</span>
@@ -215,7 +215,7 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
 
         {/* Custom Speed Direct Input Form */}
         {isCustomSpeedOpen && (
-          <form onSubmit={handleApplyCustomSpeed} className="flex items-center gap-2 p-2 bg-slate-950/80 rounded-xl border border-cyan-500/30">
+          <form onSubmit={handleApplyCustomSpeed} className="flex items-center gap-2 p-2.5 bg-[#FAF7F2] rounded-2xl border border-[#EDE6DC]">
             <input
               type="number"
               step="0.1"
@@ -224,12 +224,12 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
               placeholder="เช่น 4.5, 7.2"
               value={customInputVal}
               onChange={(e) => setCustomInputVal(e.target.value)}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white digital-number focus:outline-none focus:border-cyan-500"
+              className="flex-1 bg-white border border-[#EDE6DC] rounded-xl px-3 py-1.5 text-xs text-[#2C2621] digital-number focus:outline-none focus:border-[#52796F]"
               autoFocus
             />
             <button
               type="submit"
-              className="px-3 py-1.5 rounded-lg bg-cyan-500 text-slate-950 font-bold text-xs flex items-center gap-1 hover:bg-cyan-400 cursor-pointer active:scale-95"
+              className="px-3.5 py-1.5 rounded-xl bg-[#52796F] text-white font-bold text-xs flex items-center gap-1 hover:bg-[#43675E] cursor-pointer active:scale-95 shadow-cozy-sm"
             >
               <Check className="w-3.5 h-3.5" />
               <span>ใช้ความเร็วนี้</span>
@@ -238,10 +238,10 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
         )}
 
         {/* Stepper Row (-0.5, -0.1, [Display], +0.1, +0.5) */}
-        <div className="flex items-center justify-between gap-1 sm:gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2 bg-[#F5F0E8] p-2 rounded-2xl border border-[#EDE6DC]">
           <button
             onClick={() => adjustSpeed(-0.5)}
-            className="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-bold active:scale-95 cursor-pointer border border-slate-700/60"
+            className="flex-1 py-2.5 rounded-xl bg-white hover:bg-[#FAF7F2] text-[#5A5047] text-xs font-bold active:scale-95 cursor-pointer border border-[#EDE6DC] shadow-cozy-sm"
             title="ลด 0.5 km/h"
           >
             -0.5
@@ -249,23 +249,23 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
 
           <button
             onClick={() => adjustSpeed(-0.1)}
-            className="flex-1 py-2 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 text-xs font-bold active:scale-95 cursor-pointer border border-cyan-500/40"
+            className="flex-1 py-2.5 rounded-xl bg-[#EAF2EC] hover:bg-[#DCEAE0] text-[#3B664E] text-xs font-bold active:scale-95 cursor-pointer border border-[#CDE0D3] shadow-cozy-sm"
             title="ลด 0.1 km/h"
           >
             -0.1
           </button>
 
           {/* Central Target Speed Display */}
-          <div className="px-3 py-1 text-center min-w-[90px]">
-            <span className="text-xl sm:text-2xl font-black digital-number text-cyan-400">
+          <div className="px-3 py-1 text-center min-w-[95px]">
+            <span className="text-2xl sm:text-3xl font-black digital-number text-[#2C2621]">
               {targetSpeed.toFixed(1)}
             </span>
-            <span className="text-[10px] text-slate-400 block -mt-0.5">km/h</span>
+            <span className="text-[10px] text-[#8C827A] font-semibold block -mt-0.5">km/h</span>
           </div>
 
           <button
             onClick={() => adjustSpeed(0.1)}
-            className="flex-1 py-2 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 text-xs font-bold active:scale-95 cursor-pointer border border-cyan-500/40"
+            className="flex-1 py-2.5 rounded-xl bg-[#EAF2EC] hover:bg-[#DCEAE0] text-[#3B664E] text-xs font-bold active:scale-95 cursor-pointer border border-[#CDE0D3] shadow-cozy-sm"
             title="เพิ่ม 0.1 km/h"
           >
             +0.1
@@ -273,7 +273,7 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
 
           <button
             onClick={() => adjustSpeed(0.5)}
-            className="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-bold active:scale-95 cursor-pointer border border-slate-700/60"
+            className="flex-1 py-2.5 rounded-xl bg-white hover:bg-[#FAF7F2] text-[#5A5047] text-xs font-bold active:scale-95 cursor-pointer border border-[#EDE6DC] shadow-cozy-sm"
             title="เพิ่ม 0.5 km/h"
           >
             +0.5
@@ -290,8 +290,8 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
                 onClick={() => setDirectSpeed(spd)}
                 className={`py-2 rounded-xl text-xs font-bold digital-number transition-all cursor-pointer active:scale-95 ${
                   isSelected
-                    ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30'
-                    : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                    ? 'bg-[#52796F] text-white shadow-cozy-sm'
+                    : 'bg-white hover:bg-[#FAF7F2] text-[#5A5047] border border-[#EDE6DC]'
                 }`}
               >
                 {spd.toFixed(spd % 1 === 0 ? 0 : 1)}
@@ -302,26 +302,26 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
       </div>
 
       {/* Incline Controls Row */}
-      <div className="space-y-2 pt-2 border-t border-slate-800/50">
+      <div className="space-y-2.5 pt-3 border-t border-[#EDE6DC]">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-orange-400 font-semibold flex items-center gap-1.5">
-            <Mountain className="w-3.5 h-3.5" />
+          <span className="text-[#C46849] font-bold flex items-center gap-1.5">
+            <Mountain className="w-4 h-4" />
             <span>ปรับความชัน (Incline 0-20)</span>
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => adjustIncline(-1)}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 cursor-pointer active:scale-95 border border-slate-700"
+              className="p-1.5 rounded-xl bg-white hover:bg-[#FAF7F2] text-[#5A5047] cursor-pointer active:scale-95 border border-[#EDE6DC] shadow-cozy-sm"
               title="ลดความชัน 1"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
-            <span className="px-3 font-mono font-bold text-white text-sm">
+            <span className="px-2 font-mono font-bold text-[#2C2621] text-sm">
               Lvl {targetIncline}
             </span>
             <button
               onClick={() => adjustIncline(1)}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 cursor-pointer active:scale-95 border border-slate-700"
+              className="p-1.5 rounded-xl bg-white hover:bg-[#FAF7F2] text-[#5A5047] cursor-pointer active:scale-95 border border-[#EDE6DC] shadow-cozy-sm"
               title="เพิ่มความชัน 1"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -342,10 +342,10 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
                 }}
                 className={`py-2 rounded-xl text-xs font-bold digital-number transition-all cursor-pointer active:scale-95 ${
                   isSelected
-                    ? 'bg-orange-500 text-slate-950 shadow-md shadow-orange-500/30'
+                    ? 'bg-[#C46849] text-white shadow-cozy-sm'
                     : inc === 12
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
-                    : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                    ? 'bg-[#FDF0EC] text-[#B85737] border border-[#F6D5C9] hover:bg-[#FBE4DD]'
+                    : 'bg-white hover:bg-[#FAF7F2] text-[#5A5047] border border-[#EDE6DC]'
                 }`}
                 title={inc === 12 ? 'สูตร 12-3-30 ยอดนิยม' : undefined}
               >

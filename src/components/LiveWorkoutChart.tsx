@@ -17,9 +17,9 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
   // If no data, show idle placeholder
   if (telemetry.length < 2) {
     return (
-      <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 flex flex-col items-center justify-center min-h-[180px] text-slate-500 text-xs">
-        <Activity className="w-6 h-6 mb-2 text-slate-600 animate-pulse" />
-        <span>กราฟสถิติ Real-time จะเริ่มวาดอัตโนมัติเมื่อสายพานเริ่มหมุน</span>
+      <div className="rounded-3xl bg-white border border-[#EDE6DC] p-6 flex flex-col items-center justify-center min-h-[180px] text-[#8C827A] text-xs shadow-cozy">
+        <Activity className="w-6 h-6 mb-2 text-[#BDB5AB] animate-pulse" />
+        <span className="font-medium">กราฟสถิติจะเริ่มวาดโดยอัตโนมัติเมื่อสายพานเริ่มหมุน</span>
       </div>
     );
   }
@@ -59,18 +59,18 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
   const lastYIncline = getYIncline(lastP.incline);
 
   return (
-    <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-4 sm:p-5 relative overflow-hidden">
+    <div className="rounded-3xl bg-white border border-[#EDE6DC] p-5 sm:p-6 relative overflow-hidden shadow-cozy">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
-            <Activity className="w-4 h-4" />
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-[#EAF2EC] text-[#52796F]">
+            <Activity className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#2C2621]">
               Live Telemetry Profile
             </h3>
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[11px] text-[#8C827A]">
               วิเคราะห์ความเร็วและความชันตลอดเซสชั่น
             </span>
           </div>
@@ -78,12 +78,12 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
 
         {/* Legend */}
         <div className="flex items-center gap-4 text-xs font-medium">
-          <div className="flex items-center gap-1.5 text-cyan-400">
-            <span className="w-3 h-1 rounded-full bg-cyan-400" />
+          <div className="flex items-center gap-1.5 text-[#52796F]">
+            <span className="w-3 h-1 rounded-full bg-[#52796F]" />
             <span>Speed: {currentSpeed.toFixed(1)} km/h</span>
           </div>
-          <div className="flex items-center gap-1.5 text-orange-400">
-            <span className="w-3 h-1 rounded-full bg-orange-400" />
+          <div className="flex items-center gap-1.5 text-[#C46849]">
+            <span className="w-3 h-1 rounded-full bg-[#C46849]" />
             <span>Incline: Lvl {currentIncline}</span>
           </div>
         </div>
@@ -98,8 +98,8 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
           <defs>
             {/* Speed Gradient */}
             <linearGradient id="speedGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#52796F" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#52796F" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -115,8 +115,8 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
                   y1={y}
                   x2={width - padding.right}
                   y2={y}
-                  stroke="#334155"
-                  strokeWidth="0.7"
+                  stroke="#EDE6DC"
+                  strokeWidth="0.8"
                   strokeDasharray="4 4"
                 />
                 {/* Left Y Axis Label (Speed) */}
@@ -124,7 +124,7 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
                   x={padding.left - 6}
                   y={y + 3}
                   textAnchor="end"
-                  className="text-[9px] fill-slate-500 font-mono"
+                  className="text-[9px] fill-[#8C827A] font-mono font-medium"
                 >
                   {speedVal}
                 </text>
@@ -133,7 +133,7 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
                   x={width - padding.right + 6}
                   y={y + 3}
                   textAnchor="start"
-                  className="text-[9px] fill-slate-500 font-mono"
+                  className="text-[9px] fill-[#8C827A] font-mono font-medium"
                 >
                   {inclineVal}
                 </text>
@@ -146,7 +146,7 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
           <path
             d={speedLineD}
             fill="none"
-            stroke="#06b6d4"
+            stroke="#52796F"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -156,23 +156,23 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
           <path
             d={inclineLineD}
             fill="none"
-            stroke="#f97316"
+            stroke="#C46849"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeDasharray="2 1"
+            strokeDasharray="3 2"
           />
 
           {/* Current Heads (Pointers) */}
-          <circle cx={lastX} cy={lastYSpeed} r="4" fill="#06b6d4" stroke="#083344" strokeWidth="2" />
-          <circle cx={lastX} cy={lastYIncline} r="3.5" fill="#f97316" stroke="#431407" strokeWidth="2" />
+          <circle cx={lastX} cy={lastYSpeed} r="4.5" fill="#52796F" stroke="#FFFFFF" strokeWidth="2" />
+          <circle cx={lastX} cy={lastYIncline} r="4" fill="#C46849" stroke="#FFFFFF" strokeWidth="2" />
 
           {/* Time ticks on Bottom */}
           <text
             x={padding.left}
             y={height - 5}
             textAnchor="start"
-            className="text-[10px] fill-slate-500 font-mono"
+            className="text-[10px] fill-[#8C827A] font-mono font-medium"
           >
             {formatDuration(minSec)}
           </text>
@@ -180,7 +180,7 @@ export const LiveWorkoutChart: React.FC<LiveWorkoutChartProps> = ({
             x={width - padding.right}
             y={height - 5}
             textAnchor="end"
-            className="text-[10px] fill-slate-500 font-mono"
+            className="text-[10px] fill-[#8C827A] font-mono font-medium"
           >
             {formatDuration(maxSec)}
           </text>

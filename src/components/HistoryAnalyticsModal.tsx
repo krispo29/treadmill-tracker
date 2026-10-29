@@ -93,35 +93,35 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-md">
+      <div className="w-full max-w-4xl bg-[#FFFDFB] border border-[#EDE6DC] rounded-3xl p-6 sm:p-7 shadow-cozy-lg relative max-h-[92vh] flex flex-col text-[#2C2621]">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+          className="absolute top-5 right-5 p-2 text-[#8C827A] hover:text-[#2C2621] rounded-xl hover:bg-[#FAF7F2] transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Modal Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-cyan-500/20 text-cyan-400">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#EDE6DC] shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 rounded-2xl bg-[#EAF2EC] text-[#52796F]">
               <History className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-bold text-[#2C2621] flex items-center gap-2">
                 <span>ประวัติและสถิติการวิ่ง (Workout History)</span>
               </h2>
               <div className="flex items-center gap-2 mt-0.5 text-xs">
                 {isNeonConnected ? (
-                  <span className="text-emerald-400 flex items-center gap-1 font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[#3B664E] flex items-center gap-1.5 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-[#52796F] animate-pulse" />
                     Neon Database เชื่อมต่อแล้ว (Cloud Sync)
                   </span>
                 ) : (
-                  <span className="text-amber-400 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-[#A66E22] flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-[#DDA15E]" />
                     บันทึกลงในเครื่อง (ยังไม่ได้เชื่อม Neon)
                   </span>
                 )}
@@ -134,7 +134,7 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
             <button
               onClick={loadWorkouts}
               disabled={loading}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+              className="p-2.5 rounded-2xl bg-[#FAF7F2] hover:bg-[#F3EFE6] text-[#5A5047] border border-[#EDE6DC] transition-colors cursor-pointer"
               title="รีเฟรชข้อมูล"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -142,7 +142,7 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
 
             <button
               onClick={onOpenNeonSettings}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-400 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-2xl bg-[#FAF7F2] hover:bg-[#F3EFE6] text-xs font-semibold text-[#52796F] border border-[#EDE6DC] flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Database className="w-3.5 h-3.5" />
               <span>{isNeonConnected ? 'จัดการ Neon DB' : 'เชื่อมต่อ Neon DB'}</span>
@@ -151,18 +151,18 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
         </div>
 
         {/* Multi-Profile Filter Tabs */}
-        <div className="flex items-center gap-1.5 my-3 overflow-x-auto pb-1 shrink-0 text-xs">
-          <span className="text-slate-500 font-semibold mr-1 flex items-center gap-1">
+        <div className="flex items-center gap-1.5 my-3.5 overflow-x-auto pb-1 shrink-0 text-xs">
+          <span className="text-[#8C827A] font-bold mr-1 flex items-center gap-1">
             <Users className="w-3.5 h-3.5" />
             <span>กรองตามคนวิ่ง:</span>
           </span>
 
           <button
             onClick={() => setSelectedUserFilter('all')}
-            className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer border ${
+            className={`px-3.5 py-1.5 rounded-2xl font-bold transition-all cursor-pointer border ${
               selectedUserFilter === 'all'
-                ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
-                : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                ? 'bg-[#52796F] text-white border-[#52796F] shadow-cozy-sm'
+                : 'bg-[#FAF7F2] text-[#5A5047] border-[#EDE6DC] hover:bg-[#F3EFE6]'
             }`}
           >
             ทุกคนรวมกัน ({workouts.length})
@@ -176,54 +176,54 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
               <button
                 key={p.id}
                 onClick={() => setSelectedUserFilter(p.name)}
-                className={`px-3 py-1 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                className={`px-3.5 py-1.5 rounded-2xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
                   isSelected
-                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
-                    : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                    ? 'bg-[#52796F] text-white border-[#52796F] shadow-cozy-sm'
+                    : 'bg-[#FAF7F2] text-[#5A5047] border-[#EDE6DC] hover:bg-[#F3EFE6]'
                 }`}
               >
-                <span>{p.avatar || '🏃‍♂️'}</span>
+                <span>{p.avatar || '🏃‍♀️'}</span>
                 <span>{p.name}</span>
-                <span className="opacity-70 text-[10px]">({count})</span>
+                <span className="opacity-75 text-[10px]">({count})</span>
               </button>
             );
           })}
         </div>
 
         {/* Aggregate Stats Summary Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3 shrink-0">
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-500 block">จำนวนครั้ง</span>
-            <div className="text-xl sm:text-2xl font-black digital-number text-white mt-0.5">
-              {stats.totalWorkouts} <span className="text-xs text-slate-400 font-normal">เซสชั่น</span>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3.5 shrink-0">
+          <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#EDE6DC]">
+            <span className="text-[10px] uppercase font-bold text-[#8C827A] block">จำนวนครั้ง</span>
+            <div className="text-xl sm:text-2xl font-black digital-number text-[#2C2621] mt-0.5">
+              {stats.totalWorkouts} <span className="text-xs text-[#8C827A] font-normal">เซสชั่น</span>
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-500 block">ระยะทางรวม</span>
-            <div className="text-xl sm:text-2xl font-black digital-number text-emerald-400 mt-0.5">
-              {stats.totalDistanceKm.toFixed(1)} <span className="text-xs text-slate-400 font-normal">km</span>
+          <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#EDE6DC]">
+            <span className="text-[10px] uppercase font-bold text-[#8C827A] block">ระยะทางรวม</span>
+            <div className="text-xl sm:text-2xl font-black digital-number text-[#52796F] mt-0.5">
+              {stats.totalDistanceKm.toFixed(1)} <span className="text-xs text-[#8C827A] font-normal">km</span>
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-500 block">ความสูงสะสม</span>
-            <div className="text-xl sm:text-2xl font-black digital-number text-indigo-400 mt-0.5">
-              +{Math.round(stats.totalElevationMeters)} <span className="text-xs text-slate-400 font-normal">m</span>
+          <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#EDE6DC]">
+            <span className="text-[10px] uppercase font-bold text-[#8C827A] block">ความสูงสะสม</span>
+            <div className="text-xl sm:text-2xl font-black digital-number text-[#7C5A87] mt-0.5">
+              +{Math.round(stats.totalElevationMeters)} <span className="text-xs text-[#8C827A] font-normal">m</span>
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-500 block">แคลอรี่รวม</span>
-            <div className="text-xl sm:text-2xl font-black digital-number text-orange-400 mt-0.5">
-              {Math.round(stats.totalCalories)} <span className="text-xs text-slate-400 font-normal">kcal</span>
+          <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#EDE6DC]">
+            <span className="text-[10px] uppercase font-bold text-[#8C827A] block">แคลอรี่รวม</span>
+            <div className="text-xl sm:text-2xl font-black digital-number text-[#C46849] mt-0.5">
+              {Math.round(stats.totalCalories)} <span className="text-xs text-[#8C827A] font-normal">kcal</span>
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-500 block">ไขมันที่เผาผลาญ</span>
-            <div className="text-xl sm:text-2xl font-black digital-number text-amber-400 mt-0.5">
-              {stats.totalFatGrams.toFixed(0)} <span className="text-xs text-slate-400 font-normal">กรัม</span>
+          <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#EDE6DC]">
+            <span className="text-[10px] uppercase font-bold text-[#8C827A] block">ไขมันที่เผาผลาญ</span>
+            <div className="text-xl sm:text-2xl font-black digital-number text-[#A66E22] mt-0.5">
+              {stats.totalFatGrams.toFixed(0)} <span className="text-xs text-[#8C827A] font-normal">กรัม</span>
             </div>
           </div>
         </div>
@@ -231,29 +231,29 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
         {/* Workouts History List */}
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {filteredWorkouts.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-xs">
-              <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+            <div className="text-center py-12 text-[#8C827A] text-xs">
+              <Calendar className="w-8 h-8 mx-auto mb-2 text-[#BDB5AB]" />
               <span>ยังไม่มีประวัติการวิ่ง{selectedUserFilter !== 'all' ? ` ของ ${selectedUserFilter}` : ''}</span>
             </div>
           ) : (
             filteredWorkouts.map((w) => (
               <div
                 key={w.id}
-                className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                className="p-4 rounded-3xl bg-white border border-[#EDE6DC] hover:border-[#52796F] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-cozy-sm"
               >
                 {/* Left: Runner Badge + Program & Date */}
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Runner Avatar Badge */}
-                    <span className="px-2 py-0.5 rounded-md font-bold text-xs bg-slate-800 text-slate-200 border border-slate-700 flex items-center gap-1">
-                      <span>{w.user_avatar || '🏃‍♂️'}</span>
+                    <span className="px-2.5 py-0.5 rounded-full font-bold text-xs bg-[#FAF7F2] text-[#2C2621] border border-[#EDE6DC] flex items-center gap-1">
+                      <span>{w.user_avatar || '🏃‍♀️'}</span>
                       <span>{w.user_name || 'User'}</span>
                     </span>
 
-                    <span className="font-bold text-white text-sm">
+                    <span className="font-bold text-[#2C2621] text-sm">
                       {w.program_name || 'Free Run'}
                     </span>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-[#8C827A]">
                       • {new Date(w.created_at).toLocaleDateString('th-TH', {
                         day: 'numeric',
                         month: 'short',

@@ -79,22 +79,22 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-md">
+      <div className="w-full max-w-lg bg-[#FFFDFB] border border-[#EDE6DC] rounded-3xl p-6 sm:p-7 shadow-cozy-lg relative max-h-[90vh] overflow-y-auto text-[#2C2621]">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+          className="absolute top-5 right-5 p-2 text-[#8C827A] hover:text-[#2C2621] rounded-xl hover:bg-[#FAF7F2] transition-colors cursor-pointer"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="p-3 rounded-xl bg-cyan-500/20 text-cyan-400">
+        <div className="flex items-center gap-3.5 mb-5">
+          <div className="p-3 rounded-2xl bg-[#EAF2EC] text-[#52796F]">
             <Target className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">ตั้งเป้าหมายการซ้อม (Target Goal)</h3>
-            <p className="text-xs text-slate-400">เมื่อทำถึงเป้าหมาย จะมีแอนิเมชันแจ้งเตือนฉลองความสำเร็จ</p>
+            <h3 className="text-lg font-bold text-[#2C2621]">ตั้งเป้าหมายการซ้อม (Target Goal)</h3>
+            <p className="text-xs text-[#8C827A]">เมื่อทำถึงเป้าหมาย ระบบจะแจ้งเตือนฉลองความสำเร็จให้คุณ</p>
           </div>
         </div>
 
@@ -109,10 +109,10 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
             <button
               key={tab.id}
               onClick={() => setSelectedType(tab.id as GoalType)}
-              className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-xs font-semibold border transition-all cursor-pointer ${
+              className={`p-3 rounded-2xl flex flex-col items-center gap-1.5 text-xs font-semibold border transition-all cursor-pointer ${
                 selectedType === tab.id
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
-                  : 'bg-slate-800/60 text-slate-400 border-slate-700/60 hover:bg-slate-800'
+                  ? 'bg-[#52796F] text-white border-[#52796F] shadow-cozy-sm'
+                  : 'bg-[#FAF7F2] text-[#5A5047] border-[#EDE6DC] hover:bg-[#F3EFE6]'
               }`}
             >
               {tab.icon}
@@ -123,7 +123,7 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
 
         {/* Presets List */}
         <div className="space-y-2 mb-5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
+          <label className="text-xs font-bold uppercase tracking-wider text-[#8C827A] block">
             เลือกเป้าหมายด่วน (Quick Presets)
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -131,7 +131,7 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
               <button
                 key={preset.label}
                 onClick={() => handleApplyPreset(selectedType, preset.value, preset.label)}
-                className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-cyan-500/50 text-left text-xs font-medium text-slate-200 transition-all cursor-pointer hover:bg-slate-800/80"
+                className="p-3.5 rounded-2xl bg-white border border-[#EDE6DC] hover:border-[#52796F] text-left text-xs font-semibold text-[#2C2621] transition-all cursor-pointer hover:bg-[#FAF7F2] shadow-cozy-sm"
               >
                 {preset.label}
               </button>
@@ -140,9 +140,9 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
         </div>
 
         {/* Custom Input Form */}
-        <form onSubmit={handleSubmitCustom} className="space-y-4 pt-3 border-t border-slate-800">
+        <form onSubmit={handleSubmitCustom} className="space-y-4 pt-3 border-t border-[#EDE6DC]">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
               หรือกำหนดค่าเอง
             </label>
             <div className="relative">
@@ -152,10 +152,10 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
                 min="1"
                 value={targetValue}
                 onChange={(e) => setTargetValue(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xl font-bold digital-number text-white focus:outline-none focus:border-cyan-500"
+                className="w-full bg-[#FAF7F2] border border-[#EDE6DC] rounded-2xl px-4 py-3 text-xl font-bold digital-number text-[#2C2621] focus:outline-none focus:border-[#52796F]"
                 required
               />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 uppercase">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#8C827A] uppercase">
                 {selectedType === 'distance' ? 'KM' : selectedType === 'time' ? 'นาที' : selectedType === 'calories' ? 'KCAL' : 'เมตร'}
               </span>
             </div>
@@ -165,7 +165,7 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
             <button
               type="button"
               onClick={handleClearGoal}
-              className="text-xs text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+              className="text-xs text-[#B94A4A] hover:underline transition-colors cursor-pointer font-medium"
             >
               ยกเลิกเป้าหมาย
             </button>
@@ -174,13 +174,13 @@ export const GoalSettingsModal: React.FC<GoalSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-2xl text-xs font-medium text-[#5A5047] hover:bg-[#FAF7F2] border border-[#EDE6DC] transition-colors cursor-pointer"
               >
                 ปิด
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 hover:opacity-90 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-5 py-2.5 rounded-2xl text-xs font-bold bg-[#52796F] text-white hover:bg-[#43675E] flex items-center gap-1.5 transition-all cursor-pointer shadow-cozy-sm"
               >
                 <Check className="w-4 h-4" />
                 <span>บันทึกเป้าหมาย</span>

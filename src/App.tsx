@@ -528,7 +528,7 @@ export const App: React.FC = () => {
   const caloriesStr = Math.round(metrics.caloriesBurned).toString();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-slate-950 pb-20">
+    <div className="min-h-screen bg-[#FAF7F2] text-[#2C2621] flex flex-col selection:bg-[#52796F] selection:text-white pb-24">
       {/* Top Header */}
       <Header
         status={status}
@@ -569,19 +569,19 @@ export const App: React.FC = () => {
         )}
 
         {/* iPad Split-View Toggle & Quick Status Banner */}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 bg-slate-900/60 rounded-xl px-4 py-2.5 border border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#8C827A] bg-white rounded-2xl px-4 py-2.5 border border-[#EDE6DC] shadow-cozy-sm">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsProfileModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors font-bold cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#EAF2EC] hover:bg-[#DCEAE0] text-[#3B664E] border border-[#CDE0D3] transition-colors font-bold cursor-pointer"
             >
-              <span>{activeProfile.avatar || '🏃‍♂️'}</span>
+              <span>{activeProfile.avatar || '🏃‍♀️'}</span>
               <span>กำลังวิ่ง: {activeProfile.name}</span>
             </button>
-            <span className="hidden sm:inline text-slate-500">|</span>
+            <span className="hidden sm:inline text-[#D7CEC3]">|</span>
             <div className="hidden sm:flex items-center gap-1.5">
-              <Tablet className="w-4 h-4 text-slate-400" />
-              <span className="text-slate-300 font-medium">
+              <Tablet className="w-4 h-4 text-[#8C827A]" />
+              <span className="text-[#5A5047] font-medium">
                 {compactMode ? 'Split View' : 'Full Dashboard'}
               </span>
             </div>
@@ -592,16 +592,16 @@ export const App: React.FC = () => {
             <button
               onClick={handleManualSaveWorkout}
               disabled={isSaving || metrics.elapsedSeconds < 5}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all font-semibold cursor-pointer active:scale-95 disabled:opacity-40"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#EAF2EC] hover:bg-[#DCEAE0] text-[#3B664E] border border-[#CDE0D3] transition-all font-semibold cursor-pointer active:scale-95 disabled:opacity-40 shadow-cozy-sm"
               title={`บันทึกผลการวิ่งของ ${activeProfile.name} ขึ้น Neon Database`}
             >
-              <Save className="w-3.5 h-3.5 text-emerald-400" />
+              <Save className="w-3.5 h-3.5 text-[#52796F]" />
               <span>{isSaving ? 'กำลังบันทึก...' : `บันทึกเซสชั่นของ ${activeProfile.name}`}</span>
             </button>
 
             <button
               onClick={() => setCompactMode(!compactMode)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F3EFE6] text-[#5A5047] border border-[#EDE6DC] transition-colors cursor-pointer"
             >
               {compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns className="w-3.5 h-3.5" />}
               <span>{compactMode ? 'เต็มจอ' : 'จอแคบ'}</span>
@@ -610,15 +610,15 @@ export const App: React.FC = () => {
         </div>
 
         {/* Household Multi-Profile Quick Switcher (Phase 2) */}
-        <div className="rounded-2xl bg-slate-900/70 border border-slate-800 p-3 sm:p-4 text-xs space-y-2 shadow-sm">
+        <div className="rounded-3xl bg-white border border-[#EDE6DC] p-4 text-xs space-y-2.5 shadow-cozy">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-slate-300 flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-cyan-400" />
+            <span className="font-bold text-[#2C2621] flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#52796F]" />
               <span>👥 สลับคนวิ่งในบ้าน (Household Runners):</span>
             </span>
             <button
               onClick={() => setIsProfileModalOpen(true)}
-              className="text-xs text-cyan-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
+              className="text-xs text-[#52796F] font-bold hover:underline cursor-pointer flex items-center gap-1"
             >
               <span>⚙️ จัดการโปรไฟล์ / สปีดโปรด</span>
             </button>
@@ -631,20 +631,20 @@ export const App: React.FC = () => {
                 <button
                   key={p.id}
                   onClick={() => handleSelectProfile(p.id)}
-                  className={`px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 transition-all cursor-pointer border active:scale-95 shadow-sm ${
+                  className={`px-3.5 py-2 rounded-2xl font-bold flex items-center gap-2 transition-all cursor-pointer border active:scale-95 shadow-cozy-sm ${
                     isSelected
-                      ? 'bg-gradient-to-r from-cyan-500 to-emerald-400 text-slate-950 border-cyan-300 shadow-md shadow-cyan-500/20'
-                      : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:bg-slate-800'
+                      ? 'bg-[#52796F] text-white border-[#52796F]'
+                      : 'bg-[#FAF7F2] text-[#5A5047] border-[#EDE6DC] hover:bg-[#F3EFE6]'
                   }`}
                 >
-                  <span className="text-base leading-none">{p.avatar || '🏃‍♂️'}</span>
+                  <span className="text-base leading-none">{p.avatar || '🏃‍♀️'}</span>
                   <span className="text-sm">{p.name}</span>
-                  <span className={`text-[11px] font-mono ${isSelected ? 'text-slate-900 font-bold' : 'text-slate-500'}`}>
+                  <span className={`text-[11px] font-mono ${isSelected ? 'text-white/90' : 'text-[#8C827A]'}`}>
                     ({p.weightKg}kg)
                   </span>
                   {p.favoriteSpeeds && p.favoriteSpeeds.length > 0 && (
-                    <span className={`text-[10px] font-mono hidden md:inline ml-1 px-1.5 py-0.5 rounded ${
-                      isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-amber-300'
+                    <span className={`text-[10px] font-mono hidden md:inline ml-1 px-1.5 py-0.5 rounded-lg ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-[#FDF6EA] text-[#A66E22] border border-[#F0DFBE]'
                     }`}>
                       ⭐ {p.favoriteSpeeds.slice(0, 3).map(s => s.toFixed(1)).join('/')}
                     </span>
@@ -657,14 +657,14 @@ export const App: React.FC = () => {
 
         {/* Save Confirmation Notification Banner */}
         {saveSuccessMsg && (
-          <div className="rounded-xl p-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-2 animate-fade-in">
+          <div className="rounded-2xl p-3 bg-[#EAF2EC] border border-[#CDE0D3] text-[#3B664E] text-xs flex items-center justify-between gap-2 shadow-cozy-sm animate-fade-in">
             <span className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-400" />
+              <Check className="w-4 h-4 text-[#52796F]" />
               <span>{saveSuccessMsg}</span>
             </span>
             <button
               onClick={() => setIsHistoryModalOpen(true)}
-              className="text-xs font-bold underline hover:text-white cursor-pointer"
+              className="text-xs font-bold underline hover:text-[#2C2621] cursor-pointer"
             >
               ดูประวัติ
             </button>
@@ -816,7 +816,7 @@ export const App: React.FC = () => {
       {!isGiantHudOpen && (
         <button
           onClick={() => setIsGiantHudOpen(true)}
-          className="fixed bottom-5 right-5 z-30 px-4 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2.5 shadow-2xl shadow-cyan-500/30 border border-cyan-300/40 cursor-pointer active:scale-95 transition-all"
+          className="fixed bottom-6 right-6 z-30 px-5 py-3.5 rounded-2xl bg-[#52796F] hover:bg-[#43675E] text-white font-bold text-xs sm:text-sm flex items-center gap-2.5 shadow-cozy-lg border border-[#A8CCA8] cursor-pointer active:scale-95 transition-all"
           title="เปิดหน้าจอวิ่งขนาดยักษ์ มองชัด 1 เมตร"
         >
           <Maximize2 className="w-4 h-4" />
@@ -855,41 +855,41 @@ export const App: React.FC = () => {
 
       {/* Bluetooth Error / Permission Guide Modal */}
       {bluetoothError && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 max-w-lg w-full shadow-2xl text-slate-100 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-[#FFFDFB] border border-[#EDE6DC] rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-cozy-lg text-[#2C2621] relative">
             <button
               onClick={() => setBluetoothError(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              className="absolute top-5 right-5 text-[#8C827A] hover:text-[#2C2621] p-1.5 rounded-xl hover:bg-[#FAF7F2] transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-[#FDF0EC] border border-[#F6D5C9] flex items-center justify-center text-[#C46849] shrink-0">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div className="flex-1 pr-6">
-                <h3 className="text-lg font-bold text-white mb-1">
+                <h3 className="text-lg font-bold text-[#2C2621] mb-1">
                   {bluetoothError.title}
                 </h3>
-                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                <p className="text-xs text-[#8C827A] leading-relaxed mb-4">
                   {bluetoothError.message}
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-850 rounded-xl p-4 border border-slate-800 space-y-3 mb-5 text-xs text-slate-300">
-              <div className="font-mono text-rose-400 bg-rose-950/40 border border-rose-900/50 p-2.5 rounded-lg break-words">
+            <div className="bg-[#FAF7F2] rounded-2xl p-4 border border-[#EDE6DC] space-y-3 mb-5 text-xs text-[#5A5047]">
+              <div className="font-mono text-[#B94A4A] bg-[#FDF0F0] border border-[#F4CECE] p-2.5 rounded-xl break-words">
                 {bluetoothError.message}
               </div>
 
-              <div className="font-bold text-cyan-400 flex items-center gap-1.5 pt-1">
+              <div className="font-bold text-[#52796F] flex items-center gap-1.5 pt-1">
                 <span>💡 รายการตรวจสอบแนะนำ:</span>
               </div>
-              <ul className="list-disc list-inside space-y-1.5 leading-relaxed text-slate-200">
+              <ul className="list-disc list-inside space-y-1.5 leading-relaxed text-[#5A5047]">
                 <li>เปิดสวิตช์เครื่องลู่วิ่งให้หน้าจอติด</li>
                 <li>เปิดบลูทูธหลักของ iPad (ใน Control Center หรือ การตั้งค่า &gt; บลูทูธ)</li>
-                <li>หากใน <strong>การตั้งค่า &gt; บลูทูธ</strong> มีชื่อ <code className="text-white">FS-01BD59-A</code> เชื่อมต่ออยู่ ให้กดปุ่มตัว (i) สีฟ้า แล้วเลือก <strong>"ลืมอุปกรณ์นี้ (Forget This Device)"</strong></li>
+                <li>หากใน <strong>การตั้งค่า &gt; บลูทูธ</strong> มีชื่อ <code className="text-[#2C2621] font-bold">FS-01BD59-A</code> เชื่อมต่ออยู่ ให้กดปุ่มตัว (i) สีฟ้า แล้วเลือก <strong>"ลืมอุปกรณ์นี้ (Forget This Device)"</strong></li>
                 <li>ปิดแอป FitShow ในมือถือเครื่องอื่นให้สนิท</li>
               </ul>
             </div>
@@ -897,7 +897,7 @@ export const App: React.FC = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => setBluetoothError(null)}
-                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 transition-colors"
+                className="flex-1 py-2.5 px-4 rounded-2xl text-xs font-semibold bg-[#FAF7F2] hover:bg-[#F3EFE6] text-[#5A5047] border border-[#EDE6DC] transition-colors"
               >
                 ปิดหน้าต่าง
               </button>
@@ -906,7 +906,7 @@ export const App: React.FC = () => {
                   setBluetoothError(null);
                   handleConnect();
                 }}
-                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-500/20 active:scale-95"
+                className="flex-1 py-2.5 px-4 rounded-2xl text-xs font-bold bg-[#52796F] hover:bg-[#43675E] text-white flex items-center justify-center gap-2 transition-all shadow-cozy-sm active:scale-95"
               >
                 <RotateCcw className="w-4 h-4" />
                 <span>ลองเชื่อมต่ออีกครั้ง</span>

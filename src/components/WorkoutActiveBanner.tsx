@@ -62,31 +62,28 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
   const getStepTypeBadge = (type: string) => {
     switch (type) {
       case 'warmup':
-        return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+        return 'bg-[#FDF6EA] text-[#9A641F] border-[#F0DFBE]';
       case 'work':
-        return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+        return 'bg-[#FDF0EC] text-[#B85737] border-[#F6D5C9]';
       case 'rest':
-        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+        return 'bg-[#EAF2EC] text-[#3B664E] border-[#CDE0D3]';
       case 'cooldown':
-        return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+        return 'bg-[#F5EFF7] text-[#694874] border-[#E5D7E8]';
       default:
-        return 'bg-slate-800 text-slate-300 border-slate-700';
+        return 'bg-[#FAF7F2] text-[#5A5047] border-[#EDE6DC]';
     }
   };
 
   return (
-    <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/60 to-slate-900 border-2 border-cyan-500/50 p-4 sm:p-5 shadow-2xl shadow-cyan-500/10 relative overflow-hidden">
-      {/* Background Glow */}
-      <div className="absolute -left-10 -top-10 w-40 h-40 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
-
+    <div className="rounded-3xl bg-white border-2 border-[#CDE0D3] p-5 sm:p-6 shadow-cozy relative overflow-hidden">
       {/* Top Program & Step Meta */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-          <h2 className="text-sm sm:text-base font-bold text-white tracking-wide">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#EDE6DC]">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#52796F] animate-pulse" />
+          <h2 className="text-sm sm:text-base font-bold text-[#2C2621] tracking-wide">
             {program.title}
           </h2>
-          <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+          <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[#FAF7F2] text-[#5A5047] border border-[#EDE6DC]">
             สเต็ป {currentStepIndex + 1} / {program.steps.length}
           </span>
         </div>
@@ -96,10 +93,10 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
           {/* Auto Control Toggle */}
           <button
             onClick={onToggleAutoControl}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+            className={`px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
               autoControlEnabled
-                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
+                ? 'bg-[#EAF2EC] text-[#3B664E] border-[#CDE0D3]'
+                : 'bg-[#FAF7F2] text-[#8C827A] border-[#EDE6DC]'
             }`}
             title="ปรับความเร็วและความชันลู่วิ่งให้อัตโนมัติตามสเต็ป"
           >
@@ -110,8 +107,8 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
           {/* Voice Coach Toggle */}
           <button
             onClick={onToggleVoice}
-            className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer border ${
-              voiceEnabled ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'bg-slate-800 text-slate-500 border-slate-700'
+            className={`p-1.5 rounded-xl text-xs transition-colors cursor-pointer border ${
+              voiceEnabled ? 'bg-[#FDF6EA] text-[#9A641F] border-[#F0DFBE]' : 'bg-[#FAF7F2] text-[#8C827A] border-[#EDE6DC]'
             }`}
             title={voiceEnabled ? 'เปิดเสียงโค้ชบรรยายอยู่' : 'ปิดเสียงโค้ช'}
           >
@@ -121,8 +118,8 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
           {/* Sound Beep Toggle */}
           <button
             onClick={onToggleSound}
-            className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer border ${
-              soundEnabled ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'bg-slate-800 text-slate-500 border-slate-700'
+            className={`p-1.5 rounded-xl text-xs transition-colors cursor-pointer border ${
+              soundEnabled ? 'bg-[#FDF6EA] text-[#9A641F] border-[#F0DFBE]' : 'bg-[#FAF7F2] text-[#8C827A] border-[#EDE6DC]'
             }`}
             title={soundEnabled ? 'เปิดเสียงปี๊บอยู่' : 'ปิดเสียงปี๊บ'}
           >
@@ -132,7 +129,7 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
           {/* Stop Workout Button */}
           <button
             onClick={onStopWorkout}
-            className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/40 transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl bg-[#FDF0F0] text-[#B94A4A] hover:bg-[#FBE4E4] border border-[#F4CECE] transition-colors cursor-pointer"
             title="หยุดโปรแกรมฝึกนี้"
           >
             <X className="w-4 h-4" />
@@ -145,61 +142,61 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
         {/* Step Name & Remaining Time */}
         <div className="md:col-span-1">
           <div className="flex items-center gap-2 mb-1">
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${getStepTypeBadge(currentStep.type)}`}>
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${getStepTypeBadge(currentStep.type)}`}>
               {currentStep.type}
             </span>
-            <span className="text-xs text-slate-400 font-medium truncate">
+            <span className="text-xs text-[#8C827A] font-medium truncate">
               {currentStep.name}
             </span>
           </div>
 
           <div className="flex items-baseline gap-2">
-            <span className="text-5xl sm:text-6xl font-black digital-number text-cyan-400 glow-cyan">
+            <span className="text-5xl sm:text-6xl font-black digital-number text-[#2C2621]">
               {formatDuration(stepRemaining)}
             </span>
-            <span className="text-xs text-slate-400 font-medium">
+            <span className="text-xs text-[#8C827A] font-medium">
               เหลือในสเต็ปนี้
             </span>
           </div>
 
           {/* Mini Step Progress Bar */}
-          <div className="w-48 h-1 bg-slate-950 rounded-full overflow-hidden mt-1.5 border border-slate-800">
+          <div className="w-48 h-1.5 bg-[#F5F0E8] rounded-full overflow-hidden mt-2 border border-[#EDE6DC]">
             <div
-              className="h-full bg-cyan-400 transition-all duration-300"
+              className="h-full bg-[#52796F] transition-all duration-300 rounded-full"
               style={{ width: `${stepProgress}%` }}
             />
           </div>
 
           {currentStep.instructions && (
-            <p className="text-xs text-slate-400 mt-2 italic">
+            <p className="text-xs text-[#8C827A] mt-2 italic font-medium">
               💡 {currentStep.instructions}
             </p>
           )}
         </div>
 
         {/* Target Speed & Incline Required */}
-        <div className="md:col-span-1 flex items-center justify-around gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+        <div className="md:col-span-1 flex items-center justify-around gap-2 bg-[#FAF7F2] p-3.5 rounded-2xl border border-[#EDE6DC]">
           {/* Target Speed */}
           <div className="text-center">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold block flex items-center justify-center gap-1">
-              <Gauge className="w-3 h-3 text-cyan-400" />
+            <span className="text-[10px] uppercase tracking-wider text-[#8C827A] font-bold block flex items-center justify-center gap-1">
+              <Gauge className="w-3 h-3 text-[#52796F]" />
               เป้าหมายสปีด
             </span>
-            <div className="text-2xl sm:text-3xl font-black digital-number text-cyan-400 mt-0.5">
-              {currentStep.targetSpeed.toFixed(1)} <span className="text-xs font-normal text-slate-400">km/h</span>
+            <div className="text-2xl sm:text-3xl font-black digital-number text-[#2C2621] mt-0.5">
+              {currentStep.targetSpeed.toFixed(1)} <span className="text-xs font-normal text-[#8C827A]">km/h</span>
             </div>
           </div>
 
-          <div className="w-px h-10 bg-slate-800" />
+          <div className="w-px h-10 bg-[#EDE6DC]" />
 
           {/* Target Incline */}
           <div className="text-center">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold block flex items-center justify-center gap-1">
-              <Mountain className="w-3 h-3 text-orange-400" />
+            <span className="text-[10px] uppercase tracking-wider text-[#8C827A] font-bold block flex items-center justify-center gap-1">
+              <Mountain className="w-3 h-3 text-[#C46849]" />
               เป้าหมายความชัน
             </span>
-            <div className="text-2xl sm:text-3xl font-black digital-number text-orange-400 mt-0.5">
-              Lvl {currentStep.targetIncline} <span className="text-xs font-normal text-slate-400">/ 20</span>
+            <div className="text-2xl sm:text-3xl font-black digital-number text-[#C46849] mt-0.5">
+              Lvl {currentStep.targetIncline} <span className="text-xs font-normal text-[#8C827A]">/ 20</span>
             </div>
           </div>
         </div>
@@ -210,10 +207,10 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onPauseToggle}
-              className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md ${
+              className={`flex-1 py-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-cozy-sm ${
                 isPaused
-                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
-                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
+                  ? 'bg-[#52796F] hover:bg-[#43675E] text-white'
+                  : 'bg-[#FDF6EA] hover:bg-[#F7EEDC] text-[#9A641F] border border-[#F0DFBE]'
               }`}
             >
               {isPaused ? <Play className="w-4 h-4 fill-current" /> : <Pause className="w-4 h-4 fill-current" />}
@@ -222,7 +219,7 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
 
             <button
               onClick={onSkipStep}
-              className="px-3 py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1 cursor-pointer"
+              className="px-3.5 py-2.5 rounded-2xl font-bold text-xs bg-white hover:bg-[#FAF7F2] text-[#5A5047] border border-[#EDE6DC] transition-colors flex items-center gap-1 cursor-pointer shadow-cozy-sm"
               title="ข้ามไปยังสเต็ปถัดไป"
             >
               <SkipForward className="w-4 h-4" />
@@ -232,16 +229,16 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
 
           {/* Next Step Info */}
           {nextStep ? (
-            <div className="text-xs bg-slate-950/40 p-2 rounded-lg border border-slate-800/80 flex items-center justify-between text-slate-400">
+            <div className="text-xs bg-[#FAF7F2] p-2.5 rounded-xl border border-[#EDE6DC] flex items-center justify-between text-[#8C827A]">
               <span className="truncate">
-                ถัดไป: <strong className="text-slate-200">{nextStep.name}</strong>
+                ถัดไป: <strong className="text-[#2C2621]">{nextStep.name}</strong>
               </span>
-              <span className="font-mono text-cyan-400 shrink-0 ml-2">
+              <span className="font-mono text-[#52796F] font-semibold shrink-0 ml-2">
                 {nextStep.targetSpeed} km/h | Lvl {nextStep.targetIncline}
               </span>
             </div>
           ) : (
-            <div className="text-xs text-emerald-400 font-medium flex items-center gap-1">
+            <div className="text-xs text-[#3B664E] font-medium flex items-center gap-1">
               <Flag className="w-3.5 h-3.5" />
               <span>นี่คือสเต็ปสุดท้ายแล้ว! เตรียมคูลดาวน์</span>
             </div>
@@ -250,14 +247,14 @@ export const WorkoutActiveBanner: React.FC<WorkoutActiveBannerProps> = ({
       </div>
 
       {/* Overall Program Progress Bar */}
-      <div className="pt-2 border-t border-slate-800/80">
-        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+      <div className="pt-2 border-t border-[#EDE6DC]">
+        <div className="flex justify-between text-[11px] text-[#8C827A] mb-1 font-medium">
           <span>ความคืบหน้าทั้งโปรแกรม</span>
-          <span className="font-mono text-cyan-400 font-semibold">{totalProgress}%</span>
+          <span className="font-mono text-[#52796F] font-bold">{totalProgress}%</span>
         </div>
-        <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+        <div className="w-full h-2 bg-[#F5F0E8] rounded-full overflow-hidden p-0.5 border border-[#EDE6DC]">
           <div
-            className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full transition-all duration-300"
+            className="h-full bg-[#52796F] rounded-full transition-all duration-300"
             style={{ width: `${totalProgress}%` }}
           />
         </div>

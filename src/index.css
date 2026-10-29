@@ -2,30 +2,30 @@
 
 @layer base {
   body {
-    background-color: #090d16;
-    color: #f1f5f9;
+    background-color: #FAF7F2;
+    color: #2C2621;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
 }
 
-/* Custom Sports Dashboard styles */
+/* Cozy Studio Dashboard Typography */
 .digital-number {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
-/* Glow effects */
-.glow-cyan {
-  text-shadow: 0 0 20px rgba(6, 182, 212, 0.45);
+/* Warm organic shadows & subtle elevation */
+.shadow-cozy-sm {
+  box-shadow: 0 2px 8px -2px rgba(68, 54, 38, 0.05), 0 1px 4px -1px rgba(68, 54, 38, 0.03);
 }
 
-.glow-orange {
-  text-shadow: 0 0 20px rgba(249, 115, 22, 0.45);
+.shadow-cozy {
+  box-shadow: 0 4px 20px -4px rgba(68, 54, 38, 0.06), 0 2px 6px -1px rgba(68, 54, 38, 0.03);
 }
 
-.glow-emerald {
-  text-shadow: 0 0 20px rgba(16, 185, 129, 0.45);
+.shadow-cozy-lg {
+  box-shadow: 0 12px 32px -6px rgba(68, 54, 38, 0.1), 0 4px 12px -2px rgba(68, 54, 38, 0.05);
 }

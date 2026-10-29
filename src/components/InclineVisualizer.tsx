@@ -11,27 +11,27 @@ export const InclineVisualizer: React.FC<InclineVisualizerProps> = ({ inclineLev
   const current = Math.min(Math.max(inclineLevel, 0), maxLevels);
   const visualAngle = (current / maxLevels) * 18;
 
-  // PT Training Zones based on Incline
+  // PT Training Zones based on Incline (Warm Cozy Palette)
   const getZoneInfo = (level: number) => {
-    if (level === 0) return { label: 'ทางราบ (Flat Recovery)', color: 'text-slate-400', desc: 'ผ่อนคลาย / วอร์มอัป' };
-    if (level <= 4) return { label: 'เนินเบาๆ (Gentle Hill)', color: 'text-emerald-400', desc: 'กระตุ้นระบบหายใจ' };
-    if (level <= 8) return { label: 'เดินขึ้นเนิน (Moderate Hike)', color: 'text-cyan-400', desc: 'เริ่มดึงไขมันมาใช้ (Zone 2)' };
-    if (level <= 14) return { label: 'เดินชันเผาผลาญสูง (12-3-30 Burn)', color: 'text-orange-400', desc: 'เผาผลาญสูง โหลดข้อเข่าต่ำ' };
-    return { label: 'ไต่เขาชันพิเศษ (Peak Alpine 20)', color: 'text-rose-400 font-bold', desc: 'กล้ามเนื้อสะโพกและน่องทำงานเต็มที่' };
+    if (level === 0) return { label: 'ทางราบ (Flat Recovery)', color: 'text-[#8C827A]', desc: 'ผ่อนคลาย / วอร์มอัป' };
+    if (level <= 4) return { label: 'เนินเบาๆ (Gentle Hill)', color: 'text-[#3B664E]', desc: 'กระตุ้นการหายใจสบายๆ' };
+    if (level <= 8) return { label: 'เดินขึ้นเนิน (Moderate Hike)', color: 'text-[#A66E22] font-semibold', desc: 'เริ่มดึงไขมันสะสม (Zone 2)' };
+    if (level <= 14) return { label: 'เดินชันเผาผลาญสูง (12-3-30 Burn)', color: 'text-[#C46849] font-semibold', desc: 'เผาผลาญสูง ถนอมข้อเข่า' };
+    return { label: 'ไต่เขาชันพิเศษ (Peak Alpine 20)', color: 'text-[#B94A4A] font-bold', desc: 'กระชับสะโพกและเรียวขาเต็มที่' };
   };
 
   const zone = getZoneInfo(current);
 
   return (
-    <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-4 sm:p-5 flex flex-col justify-between">
+    <div className="rounded-3xl bg-white border border-[#EDE6DC] shadow-cozy p-5 sm:p-6 flex flex-col justify-between">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-orange-500/20 text-orange-400">
-            <Mountain className="w-4 h-4" />
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-[#FDF0EC] text-[#C46849]">
+            <Mountain className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#8C827A]">
               ความชันลู่วิ่ง (Incline)
             </h3>
             <span className={`text-xs ${zone.color}`}>{zone.label}</span>
@@ -40,24 +40,24 @@ export const InclineVisualizer: React.FC<InclineVisualizerProps> = ({ inclineLev
 
         {/* Big Digit Display */}
         <div className="flex items-baseline gap-1">
-          <span className="text-4xl font-black digital-number text-orange-400 glow-orange">
+          <span className="text-4xl sm:text-5xl font-black digital-number text-[#2C2621]">
             {current}
           </span>
-          <span className="text-xs text-slate-500 font-medium">/ 20</span>
+          <span className="text-xs text-[#8C827A] font-medium">/ 20</span>
         </div>
       </div>
 
       {/* Visual Animated Slope */}
-      <div className="relative h-20 my-2 bg-slate-950/60 rounded-xl overflow-hidden border border-slate-800/80 flex items-end px-4 pb-2">
+      <div className="relative h-20 my-2 bg-[#FAF7F2] rounded-2xl overflow-hidden border border-[#EDE6DC] flex items-end px-4 pb-2">
         {/* Dynamic Slope line */}
         <div
-          className="absolute left-0 bottom-0 w-full h-1.5 bg-gradient-to-r from-orange-500 to-amber-300 origin-bottom-left transition-transform duration-500 ease-out shadow-lg shadow-orange-500/50"
+          className="absolute left-0 bottom-0 w-full h-2 bg-gradient-to-r from-[#DDA15E] to-[#C46849] origin-bottom-left transition-transform duration-500 ease-out shadow-sm"
           style={{ transform: `rotate(-${visualAngle}deg)` }}
         />
 
         {/* Slope Fill */}
         <div
-          className="absolute left-0 bottom-0 w-full bg-gradient-to-t from-orange-500/15 to-transparent origin-bottom-left transition-transform duration-500 ease-out pointer-events-none"
+          className="absolute left-0 bottom-0 w-full bg-gradient-to-t from-[#C46849]/15 to-transparent origin-bottom-left transition-transform duration-500 ease-out pointer-events-none"
           style={{
             height: '100%',
             transform: `rotate(-${visualAngle}deg)`,
@@ -66,18 +66,18 @@ export const InclineVisualizer: React.FC<InclineVisualizerProps> = ({ inclineLev
 
         {/* Treadmill Walker Icon representation */}
         <div
-          className="absolute z-10 transition-all duration-500 ease-out flex items-center justify-center text-white"
+          className="absolute z-10 transition-all duration-500 ease-out flex items-center justify-center text-[#2C2621]"
           style={{
             left: '45%',
             bottom: `${Math.max(6, (current / 20) * 45)}px`,
           }}
         >
-          <span className="text-lg">🏃‍♂️</span>
+          <span className="text-xl">🏃‍♀️</span>
         </div>
 
-        <div className="relative z-10 w-full flex justify-between text-[10px] text-slate-500">
+        <div className="relative z-10 w-full flex justify-between text-[11px] text-[#8C827A] font-medium">
           <span>0 (0%)</span>
-          <span className="text-orange-400/80 font-medium">{zone.desc}</span>
+          <span className="text-[#C46849] font-medium">{zone.desc}</span>
           <span>Level 20</span>
         </div>
       </div>
@@ -91,14 +91,14 @@ export const InclineVisualizer: React.FC<InclineVisualizerProps> = ({ inclineLev
             return (
               <div
                 key={levelNum}
-                className={`rounded-sm transition-all duration-300 ${
+                className={`rounded-full transition-all duration-300 ${
                   isActive
                     ? levelNum > 14
-                      ? 'bg-rose-500 shadow-sm shadow-rose-500'
+                      ? 'bg-[#C95D63]'
                       : levelNum > 8
-                      ? 'bg-orange-500 shadow-sm shadow-orange-500'
-                      : 'bg-amber-400'
-                    : 'bg-slate-800'
+                      ? 'bg-[#C46849]'
+                      : 'bg-[#DDA15E]'
+                    : 'bg-[#EFE8DD]'
                 }`}
                 title={`Level ${levelNum}`}
               />

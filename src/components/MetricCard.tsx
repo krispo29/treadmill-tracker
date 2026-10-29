@@ -21,39 +21,34 @@ export const MetricCard: React.FC<MetricCardProps> = ({
 }) => {
   const colorMap = {
     cyan: {
-      border: 'border-cyan-500/30 hover:border-cyan-500/50',
-      text: 'text-cyan-400 glow-cyan',
-      bgGlow: 'bg-cyan-500/5',
-      badge: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
-      iconBg: 'bg-cyan-500/20 text-cyan-400'
+      border: 'border-[#EDE6DC] hover:border-[#D8CFBF]',
+      text: 'text-[#2C2621]',
+      badge: 'bg-[#EAF2EC] text-[#3B664E] border-[#CDE0D3]',
+      iconBg: 'bg-[#EAF2EC] text-[#52796F]'
     },
     orange: {
-      border: 'border-orange-500/30 hover:border-orange-500/50',
-      text: 'text-orange-400 glow-orange',
-      bgGlow: 'bg-orange-500/5',
-      badge: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
-      iconBg: 'bg-orange-500/20 text-orange-400'
+      border: 'border-[#EDE6DC] hover:border-[#D8CFBF]',
+      text: 'text-[#2C2621]',
+      badge: 'bg-[#FDF0EC] text-[#B85737] border-[#F6D5C9]',
+      iconBg: 'bg-[#FDF0EC] text-[#C46849]'
     },
     emerald: {
-      border: 'border-emerald-500/30 hover:border-emerald-500/50',
-      text: 'text-emerald-400 glow-emerald',
-      bgGlow: 'bg-emerald-500/5',
-      badge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
-      iconBg: 'bg-emerald-500/20 text-emerald-400'
+      border: 'border-[#EDE6DC] hover:border-[#D8CFBF]',
+      text: 'text-[#2C2621]',
+      badge: 'bg-[#EAF2EC] text-[#3B664E] border-[#CDE0D3]',
+      iconBg: 'bg-[#EAF2EC] text-[#4E7D63]'
     },
     purple: {
-      border: 'border-purple-500/30 hover:border-purple-500/50',
-      text: 'text-purple-400',
-      bgGlow: 'bg-purple-500/5',
-      badge: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
-      iconBg: 'bg-purple-500/20 text-purple-400'
+      border: 'border-[#EDE6DC] hover:border-[#D8CFBF]',
+      text: 'text-[#2C2621]',
+      badge: 'bg-[#F5EFF7] text-[#694874] border-[#E5D7E8]',
+      iconBg: 'bg-[#F5EFF7] text-[#7C5A87]'
     },
     amber: {
-      border: 'border-amber-500/30 hover:border-amber-500/50',
-      text: 'text-amber-400',
-      bgGlow: 'bg-amber-500/5',
-      badge: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
-      iconBg: 'bg-amber-500/20 text-amber-400'
+      border: 'border-[#EDE6DC] hover:border-[#D8CFBF]',
+      text: 'text-[#2C2621]',
+      badge: 'bg-[#FDF6EA] text-[#9A641F] border-[#F0DFBE]',
+      iconBg: 'bg-[#FDF6EA] text-[#B67A28]'
     }
   };
 
@@ -61,19 +56,16 @@ export const MetricCard: React.FC<MetricCardProps> = ({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl bg-slate-900/90 border p-4 sm:p-5 transition-all duration-200 ${
+      className={`relative overflow-hidden rounded-3xl bg-white border p-5 sm:p-6 shadow-cozy transition-all duration-200 ${
         scheme.border
-      } ${highlight ? 'ring-2 ring-cyan-500/40 shadow-lg shadow-cyan-500/10' : ''}`}
+      } ${highlight ? 'ring-2 ring-[#52796F] shadow-cozy-lg' : ''}`}
     >
-      {/* Background ambient glow */}
-      <div className={`absolute -right-8 -bottom-8 w-32 h-32 rounded-full blur-3xl pointer-events-none ${scheme.bgGlow}`} />
-
       {/* Header with Title and Icon */}
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-semibold tracking-wider uppercase text-slate-400">
+        <span className="text-xs font-bold tracking-wider uppercase text-[#8C827A]">
           {title}
         </span>
-        <div className={`p-2 rounded-xl text-base ${scheme.iconBg}`}>
+        <div className={`p-2.5 rounded-2xl text-base ${scheme.iconBg}`}>
           {icon}
         </div>
       </div>
@@ -83,14 +75,14 @@ export const MetricCard: React.FC<MetricCardProps> = ({
         <span className={`text-4xl sm:text-5xl font-black digital-number ${scheme.text}`}>
           {value}
         </span>
-        <span className={`text-xs sm:text-sm font-semibold px-2 py-0.5 rounded-md border ${scheme.badge}`}>
+        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-xl border ${scheme.badge}`}>
           {unit}
         </span>
       </div>
 
       {/* Optional Subtitle */}
       {subtitle && (
-        <p className="text-xs text-slate-400 mt-2 truncate">
+        <p className="text-xs text-[#8C827A] mt-2 truncate font-medium">
           {subtitle}
         </p>
       )}
