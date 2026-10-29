@@ -4,7 +4,8 @@ import { calculateAcsmCaloriesPerSecond, calculateFatGramsBurned } from './calcu
 // Standard FTMS Service & Characteristics (128-bit lowercase standard UUIDs for 100% iOS/Bluefy compatibility)
 export const UUID_FTMS_SERVICE = '00001826-0000-1000-8000-00805f9b34fb';
 export const UUID_FTMS_TREADMILL_DATA = '00002acd-0000-1000-8000-00805f9b34fb';
-export const UUID_FTMS_CONTROL_POINT = '00002ada-0000-1000-8000-00805f9b34fb';
+export const UUID_FTMS_CONTROL_POINT = '00002ad9-0000-1000-8000-00805f9b34fb'; // 0x2AD9 = Fitness Machine Control Point
+export const UUID_FTMS_STATUS = '00002ada-0000-1000-8000-00805f9b34fb'; // 0x2ADA = Fitness Machine Status
 
 // Proprietary FitShow UUIDs (0xFFF0)
 export const UUID_FITSHOW_SERVICE_128 = '0000fff0-0000-1000-8000-00805f9b34fb';
@@ -157,12 +158,26 @@ class TreadmillBluetoothService {
           this.parseFTMSPacket(e.target.value);
         });
 
-        // Try getting control point
+        // Try getting control point (0x2AD9)
         try {
           this.controlChar = await ftmsService.getCharacteristic(UUID_FTMS_CONTROL_POINT);
-          this.addLog('SYS', 'FTMS', '', 'พบ Control Point สำหรับส่งคำสั่งสปีด/ความชัน');
-        } catch {
-          // Write characteristic is optional for read-only tracking
+          this.addLog('SYS', 'FTMS', '', 'พบ Control Point สำหรับส่งคำสั่งสปีด/ความชัน (0x2AD9)');
+
+          // Enable indications / notifications for command responses
+          try {
+            await this.controlChar.startNotifications();
+            this.controlChar.addEventListener('characteristicvaluechanged', (e: any) => {
+              this.handleControlPointResponse(new Uint8Array(e.target.value.buffer));
+            });
+            this.addLog('SYS', 'FTMS', '', 'เปิดรับสัญญาณตอบรับจาก Control Point เรียบร้อย');
+          } catch (indErr) {
+            console.warn('Control point indication error:', indErr);
+          }
+
+          // Request Control immediately (Opcode 0x00)
+          await this.requestFtmsControl();
+        } catch (cpErr: any) {
+          this.addLog('SYS', 'FTMS', '', `ไม่พบ Control Point 0x2AD9: ${cpErr.message}`);
         }
 
         serviceConnected = true;
@@ -221,6 +236,152 @@ class TreadmillBluetoothService {
     }
   }
 
+  private hasFtmsControl: boolean = false;
+
+  /**
+   * Request control of the FTMS machine (Opcode 0x00)
+   */
+  public async requestFtmsControl(): Promise<boolean> {
+    if (!this.controlChar || this.protocol !== 'FTMS') return false;
+    try {
+      this.addLog('TX', 'FTMS', '00', 'ส่งคำสั่งขอสิทธิ์ควบคุมลู่ (Request Control: 0x00)...');
+      await this.writeControlData(new Uint8Array([0x00]));
+      this.hasFtmsControl = true;
+      return true;
+    } catch (err: any) {
+      this.addLog('SYS', 'FTMS', '', `ขอสิทธิ์ควบคุมไม่สำเร็จ: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Handle Indication responses from Control Point (0x2AD9)
+   */
+  private handleControlPointResponse(data: Uint8Array) {
+    if (data.length < 3) return;
+    const requestOpcode = data[1];
+    const resultCode = data[2];
+
+    const opcodeNames: Record<number, string> = {
+      0x00: 'Request Control',
+      0x01: 'Reset',
+      0x02: 'Set Speed',
+      0x03: 'Set Incline',
+      0x07: 'Start / Resume',
+      0x08: 'Stop / Pause'
+    };
+
+    const resultNames: Record<number, string> = {
+      0x01: 'สำเร็จ (Success) ✅',
+      0x02: 'ไม่รองรับคำสั่งนี้',
+      0x03: 'พารามิเตอร์ผิดพลาด',
+      0x04: 'ล้มเหลว',
+      0x05: 'ยังไม่ได้รับสิทธิ์ควบคุม'
+    };
+
+    const opName = opcodeNames[requestOpcode] || `Opcode 0x${requestOpcode.toString(16)}`;
+    const resName = resultNames[resultCode] || `Result 0x${resultCode.toString(16)}`;
+
+    this.addLog('RX', 'FTMS', this.buf2hex(data.buffer), `ตอบกลับ [${opName}]: ${resName}`);
+    if (resultCode === 0x01 && requestOpcode === 0x00) {
+      this.hasFtmsControl = true;
+    }
+  }
+
+  /**
+   * Low-level helper to write data to control characteristic with response fallback
+   */
+  private async writeControlData(buffer: Uint8Array): Promise<void> {
+    if (!this.controlChar) throw new Error('Control Point not ready');
+    try {
+      if (this.controlChar.writeValueWithResponse) {
+        await this.controlChar.writeValueWithResponse(buffer);
+      } else {
+        await this.controlChar.writeValue(buffer);
+      }
+    } catch (err) {
+      if (this.controlChar.writeValueWithoutResponse) {
+        await this.controlChar.writeValueWithoutResponse(buffer);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * Start or Resume treadmill belt (Start at 3.0 km/h or custom speed)
+   */
+  public async startTreadmill(speedKmh: number = 3.0): Promise<boolean> {
+    if (this.protocol === 'Simulation') {
+      this.metrics.speedKmh = speedKmh;
+      this.addLog('TX', 'Simulation', '', `จำลองเริ่มเดินที่ ${speedKmh} km/h`);
+      if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
+      return true;
+    }
+
+    if (!this.controlChar) {
+      this.addLog('SYS', this.protocol, '', 'ไม่มี Control Point สำหรับส่งคำสั่งเริ่มหมุนลู่');
+      return false;
+    }
+
+    try {
+      if (this.protocol === 'FTMS') {
+        if (!this.hasFtmsControl) {
+          await this.requestFtmsControl();
+        }
+        this.addLog('TX', 'FTMS', '07', 'ส่งคำสั่งเริ่มสายพานลู่ (Start: 0x07)...');
+        await this.writeControlData(new Uint8Array([0x07]));
+        
+        // Wait 400ms for motor initiation, then set speed
+        setTimeout(async () => {
+          await this.setSpeed(speedKmh);
+        }, 400);
+        return true;
+      } else if (this.protocol === 'FitShow_FFF0') {
+        const startBuffer = new Uint8Array([0x02, 0x53, 0x01, 0x01, 0x51, 0x03]);
+        await this.writeControlData(startBuffer);
+        this.addLog('TX', 'FitShow_FFF0', this.buf2hex(startBuffer.buffer), 'ส่งคำสั่งเริ่มสายพาน FitShow');
+        setTimeout(async () => {
+          await this.setSpeed(speedKmh);
+        }, 400);
+        return true;
+      }
+    } catch (err: any) {
+      this.addLog('SYS', this.protocol, '', `สั่งเริ่มสายพานไม่สำเร็จ: ${err.message}`);
+    }
+    return false;
+  }
+
+  /**
+   * Stop treadmill belt
+   */
+  public async stopTreadmill(): Promise<boolean> {
+    if (this.protocol === 'Simulation') {
+      this.metrics.speedKmh = 0;
+      this.addLog('TX', 'Simulation', '', 'จำลองหยุดลู่วิ่ง');
+      if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
+      return true;
+    }
+
+    if (!this.controlChar) return false;
+
+    try {
+      if (this.protocol === 'FTMS') {
+        this.addLog('TX', 'FTMS', '08 01', 'ส่งคำสั่งหยุดลู่ (Stop: 0x08 0x01)...');
+        await this.writeControlData(new Uint8Array([0x08, 0x01]));
+        return true;
+      } else if (this.protocol === 'FitShow_FFF0') {
+        const stopBuffer = new Uint8Array([0x02, 0x53, 0x01, 0x02, 0x52, 0x03]);
+        await this.writeControlData(stopBuffer);
+        this.addLog('TX', 'FitShow_FFF0', this.buf2hex(stopBuffer.buffer), 'ส่งคำสั่งหยุดลู่ FitShow');
+        return true;
+      }
+    } catch (err: any) {
+      this.addLog('SYS', this.protocol, '', `สั่งหยุดลู่ไม่สำเร็จ: ${err.message}`);
+    }
+    return false;
+  }
+
   /**
    * Send speed command to treadmill (0.0 to 16.0 km/h)
    */
@@ -241,23 +402,42 @@ class TreadmillBluetoothService {
 
     try {
       if (this.protocol === 'FTMS') {
+        if (!this.hasFtmsControl) {
+          await this.requestFtmsControl();
+        }
+
+        // If currently stopped and setting speed > 0, issue Start command first
+        if (clamped > 0 && this.metrics.speedKmh === 0) {
+          try {
+            this.addLog('TX', 'FTMS', '07', 'สั่งเริ่มเดินสายพานก่อนปรับสปีด (Start: 0x07)...');
+            await this.writeControlData(new Uint8Array([0x07]));
+            await new Promise((r) => setTimeout(r, 200));
+          } catch {}
+        } else if (clamped === 0) {
+          // Setting 0 km/h is Stop
+          return await this.stopTreadmill();
+        }
+
         // FTMS Set Target Speed: Opcode 0x02, uint16 speed in 0.01 km/h
         const rawSpeed = Math.round(clamped * 100);
         const buffer = new Uint8Array([0x02, rawSpeed & 0xff, (rawSpeed >> 8) & 0xff]);
-        await this.controlChar.writeValue(buffer);
+        await this.writeControlData(buffer);
         this.addLog('TX', 'FTMS', this.buf2hex(buffer.buffer), `ส่งคำสั่งสปีด: ${clamped} km/h`);
         return true;
       } else if (this.protocol === 'FitShow_FFF0') {
+        if (clamped === 0) {
+          return await this.stopTreadmill();
+        }
         // FitShow Speed Frame: 0x02 0x53 0x02 <speed*10> <checksum> 0x03
         const rawSpeed = Math.round(clamped * 10);
         const checksum = (0x02 ^ 0x53 ^ 0x02 ^ rawSpeed) & 0xff;
         const buffer = new Uint8Array([0x02, 0x53, 0x02, rawSpeed, checksum, 0x03]);
-        await this.controlChar.writeValue(buffer);
+        await this.writeControlData(buffer);
         this.addLog('TX', 'FitShow_FFF0', this.buf2hex(buffer.buffer), `ส่งคำสั่งสปีด: ${clamped} km/h`);
         return true;
       }
     } catch (err: any) {
-      this.addLog('SYS', this.protocol, '', `ส่งคำสั่งไม่สำเร็จ: ${err.message}`);
+      this.addLog('SYS', this.protocol, '', `ส่งคำสั่งสปีดไม่สำเร็จ: ${err.message}`);
     }
     return false;
   }
@@ -282,17 +462,21 @@ class TreadmillBluetoothService {
 
     try {
       if (this.protocol === 'FTMS') {
+        if (!this.hasFtmsControl) {
+          await this.requestFtmsControl();
+        }
+
         // FTMS Set Target Inclination: Opcode 0x03, int16 in 0.1%
         const rawIncline = clamped * 10;
         const buffer = new Uint8Array([0x03, rawIncline & 0xff, (rawIncline >> 8) & 0xff]);
-        await this.controlChar.writeValue(buffer);
+        await this.writeControlData(buffer);
         this.addLog('TX', 'FTMS', this.buf2hex(buffer.buffer), `ส่งคำสั่งความชัน: ระดับ ${clamped}`);
         return true;
       } else if (this.protocol === 'FitShow_FFF0') {
         // FitShow Incline Frame: 0x02 0x55 0x01 <level> <checksum> 0x03
         const checksum = (0x02 ^ 0x55 ^ 0x01 ^ clamped) & 0xff;
         const buffer = new Uint8Array([0x02, 0x55, 0x01, clamped, checksum, 0x03]);
-        await this.controlChar.writeValue(buffer);
+        await this.writeControlData(buffer);
         this.addLog('TX', 'FitShow_FFF0', this.buf2hex(buffer.buffer), `ส่งคำสั่งความชัน: ระดับ ${clamped}`);
         return true;
       }

@@ -1,18 +1,22 @@
 import React from 'react';
-import { Plus, Minus, Mountain, Gauge } from 'lucide-react';
+import { Plus, Minus, Mountain, Gauge, Play, Square } from 'lucide-react';
 
 interface QuickControlsProps {
   currentSpeed: number;
   currentIncline: number;
   onSetSpeed: (speed: number) => void;
   onSetIncline: (incline: number) => void;
+  onStart?: (speed?: number) => void;
+  onStop?: () => void;
 }
 
 export const QuickControls: React.FC<QuickControlsProps> = ({
   currentSpeed,
   currentIncline,
   onSetSpeed,
-  onSetIncline
+  onSetIncline,
+  onStart,
+  onStop
 }) => {
   const speedPresets = [3.0, 5.0, 8.0, 10.0, 12.0, 16.0];
   const inclinePresets = [0, 4, 8, 12, 16, 20];
@@ -26,6 +30,25 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
         <span className="text-[11px] text-slate-500">
           แตะเพื่อปรับสปีดหรือความชันทันที
         </span>
+      </div>
+
+      {/* Master Motor Controls: Start / Stop */}
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <button
+          onClick={() => onStart ? onStart(3.0) : onSetSpeed(3.0)}
+          className="py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+        >
+          <Play className="w-4 h-4 fill-slate-950" />
+          <span>เริ่มเดิน (Start 3.0)</span>
+        </button>
+
+        <button
+          onClick={() => onStop ? onStop() : onSetSpeed(0)}
+          className="py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+        >
+          <Square className="w-4 h-4 fill-rose-300" />
+          <span>หยุดสายพาน (Stop)</span>
+        </button>
       </div>
 
       {/* Speed Controls Row */}

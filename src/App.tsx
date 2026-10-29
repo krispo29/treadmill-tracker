@@ -315,6 +315,14 @@ export const App: React.FC = () => {
     bluetoothService.setIncline(inc);
   };
 
+  const handleStartTreadmill = (spd: number = 3.0) => {
+    bluetoothService.startTreadmill(spd);
+  };
+
+  const handleStopTreadmill = () => {
+    bluetoothService.stopTreadmill();
+  };
+
   // Workout Program controls
   const handleStartProgram = (prog: WorkoutProgram) => {
     setWorkoutState({
@@ -564,6 +572,8 @@ export const App: React.FC = () => {
           currentIncline={metrics.inclineLevel}
           onSetSpeed={handleSetSpeed}
           onSetIncline={handleSetIncline}
+          onStart={handleStartTreadmill}
+          onStop={handleStopTreadmill}
         />
 
         {/* Live Workout Telemetry Chart (Speed Area & Incline Line) */}
