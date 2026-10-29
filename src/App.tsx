@@ -236,24 +236,14 @@ export const App: React.FC = () => {
     } catch (err: any) {
       console.error('Connection failed:', err);
       const msg = String(err?.message || err || '');
-      if (
-        msg.includes('Error 2') || 
-        msg.includes('iPad ยังไม่อนุญาตบลูทูธ') || 
-        msg === '2' || 
-        msg.includes('denied')
-      ) {
-        setBluetoothError({
-          code: 'ERROR_2_PERMISSION',
-          title: 'iPad ยังไม่อนุญาตบลูทูธให้แอป Bluefy (Error: 2)',
-          message: 'ระบบ iPad ปฏิเสธการเข้าถึงสัญญาณบลูทูธ เนื่องจากยังไม่ได้เปิดสิทธิ์ในการตั้งค่าของ iPad'
-        });
-      } else if (!msg.toLowerCase().includes('ยกเลิก') && !msg.toLowerCase().includes('cancel')) {
-        setBluetoothError({
-          code: 'GENERAL_ERROR',
-          title: 'เกิดข้อผิดพลาดในการเชื่อมต่อ',
-          message: msg
-        });
+      if (msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('ยกเลิก')) {
+        return; // User dismissed device picker
       }
+      setBluetoothError({
+        code: 'BLUETOOTH_ERROR',
+        title: 'ไม่สามารถเชื่อมต่อบลูทูธได้',
+        message: msg
+      });
     }
   };
 
@@ -754,39 +744,21 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {bluetoothError.code === 'ERROR_2_PERMISSION' ? (
-              <div className="bg-slate-850 rounded-xl p-4 border border-slate-800 space-y-3 mb-5 text-xs text-slate-300">
-                <div className="font-bold text-cyan-400 flex items-center gap-1.5">
-                  <span>📱 วิธีแก้ไขบน iPad ใน 3 ขั้นตอน:</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-2 leading-relaxed text-slate-200">
-                  <li>
-                    สลับไปที่หน้าจอหลัก แล้วเปิดแอป <strong className="text-white">"การตั้งค่า" (Settings)</strong> ของ iPad
-                  </li>
-                  <li>
-                    เลื่อนแถบด้านซ้ายลงไปล่างสุด แตะที่ชื่อแอป <strong className="text-cyan-300">"Bluefy"</strong>
-                    <br />
-                    <span className="text-[11px] text-slate-400 pl-4">
-                      (หรือไปที่ <em>ความเป็นส่วนตัวและความปลอดภัย &gt; บลูทูธ</em>)
-                    </span>
-                  </li>
-                  <li>
-                    แตะเปิดสวิตช์ <strong className="text-emerald-400">"บลูทูธ (Bluetooth)"</strong> ให้เป็นสีเขียว (ON)
-                  </li>
-                </ol>
+            <div className="bg-slate-850 rounded-xl p-4 border border-slate-800 space-y-3 mb-5 text-xs text-slate-300">
+              <div className="font-mono text-rose-400 bg-rose-950/40 border border-rose-900/50 p-2.5 rounded-lg break-words">
+                {bluetoothError.message}
+              </div>
 
-                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300/90 leading-relaxed">
-                  💡 <strong>ข้อควรระวัง:</strong> ในหน้า Settings &gt; Bluetooth ของ iPad หากมีชื่อลู่ <code className="text-white">FS-01BD59-A</code> เชื่อมต่ออยู่ ให้กดปุ่มตัว (i) สีฟ้า แล้วเลือก <strong>"ลืมอุปกรณ์นี้ (Forget This Device)"</strong> ก่อนนะครับ
-                </div>
+              <div className="font-bold text-cyan-400 flex items-center gap-1.5 pt-1">
+                <span>💡 รายการตรวจสอบแนะนำ:</span>
               </div>
-            ) : (
-              <div className="bg-slate-850 rounded-xl p-4 border border-slate-800 mb-5 text-xs text-slate-300">
-                <p className="font-mono text-rose-400 mb-2">{bluetoothError.message}</p>
-                <p className="text-slate-400">
-                  โปรดตรวจสอบว่าเปิดลู่วิ่งไว้ และบลูทูธของ iPad ไม่ได้เชื่อมต่อค้างกับอุปกรณ์อื่น
-                </p>
-              </div>
-            )}
+              <ul className="list-disc list-inside space-y-1.5 leading-relaxed text-slate-200">
+                <li>เปิดสวิตช์เครื่องลู่วิ่งให้หน้าจอติด</li>
+                <li>เปิดบลูทูธหลักของ iPad (ใน Control Center หรือ การตั้งค่า &gt; บลูทูธ)</li>
+                <li>หากใน <strong>การตั้งค่า &gt; บลูทูธ</strong> มีชื่อ <code className="text-white">FS-01BD59-A</code> เชื่อมต่ออยู่ ให้กดปุ่มตัว (i) สีฟ้า แล้วเลือก <strong>"ลืมอุปกรณ์นี้ (Forget This Device)"</strong></li>
+                <li>ปิดแอป FitShow ในมือถือเครื่องอื่นให้สนิท</li>
+              </ul>
+            </div>
 
             <div className="flex gap-3">
               <button

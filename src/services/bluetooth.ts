@@ -1,16 +1,22 @@
 import type { BluetoothProtocol, ConnectionStatus, PacketLog, TelemetryPoint, TreadmillMetrics } from '../types/treadmill';
 import { calculateAcsmCaloriesPerSecond, calculateFatGramsBurned } from './calculations';
 
-// Standard FTMS Service & Characteristics
-export const UUID_FTMS_SERVICE = 0x1826;
-export const UUID_FTMS_TREADMILL_DATA = 0x2acd;
-export const UUID_FTMS_CONTROL_POINT = 0x2ada;
+// Standard FTMS Service & Characteristics (128-bit lowercase standard UUIDs for 100% iOS/Bluefy compatibility)
+export const UUID_FTMS_SERVICE = '00001826-0000-1000-8000-00805f9b34fb';
+export const UUID_FTMS_TREADMILL_DATA = '00002acd-0000-1000-8000-00805f9b34fb';
+export const UUID_FTMS_CONTROL_POINT = '00002ada-0000-1000-8000-00805f9b34fb';
 
 // Proprietary FitShow UUIDs (0xFFF0)
-export const UUID_FITSHOW_SERVICE_16 = 0xfff0;
 export const UUID_FITSHOW_SERVICE_128 = '0000fff0-0000-1000-8000-00805f9b34fb';
 export const UUID_FITSHOW_NOTIFY = '0000fff1-0000-1000-8000-00805f9b34fb';
 export const UUID_FITSHOW_WRITE = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+// Clean list of optional services (valid 128-bit strings only, avoids iOS CBUUID parser crash)
+export const CLEAN_OPTIONAL_SERVICES = [
+  UUID_FTMS_SERVICE,
+  UUID_FITSHOW_SERVICE_128,
+  '0000180d-0000-1000-8000-00805f9b34fb', // Heart Rate Service
+];
 
 type DataCallback = (metrics: TreadmillMetrics) => void;
 type StatusCallback = (status: ConnectionStatus, protocol: BluetoothProtocol, deviceName?: string) => void;
@@ -88,44 +94,40 @@ class TreadmillBluetoothService {
       this.updateStatus('searching', 'Unknown');
       this.addLog('SYS', 'Unknown', '', 'กำลังสแกนหาอุปกรณ์ลู่วิ่ง...');
 
-      const optionalServices = [
-        UUID_FTMS_SERVICE,
-        '00001826-0000-1000-8000-00805f9b34fb',
-        UUID_FITSHOW_SERVICE_16,
-        UUID_FITSHOW_SERVICE_128,
-        0x180d, // Heart Rate Service
-        '0000180d-0000-1000-8000-00805f9b34fb',
-        'generic_access'
-      ];
+      // Detect iOS / Bluefy
+      const isIOS = typeof navigator !== 'undefined' && (
+        /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+        /Bluefy/i.test(navigator.userAgent)
+      );
 
-      // Scan for FS- prefix or FitShow services, with fallback to acceptAllDevices
-      try {
-        this.device = await (navigator as any).bluetooth.requestDevice({
-          filters: [
-            { namePrefix: 'FS' },
-            { namePrefix: 'fs' },
-            { namePrefix: 'Fs' },
-            { namePrefix: 'FitShow' },
-            { namePrefix: 'fitshow' },
-          ],
-          optionalServices
-        });
-      } catch (filterErr: any) {
-        const rawFilterErr = String(filterErr?.message || filterErr || '');
-        // If user explicitly cancelled or permission was denied (Error 2), don't retry
-        if (
-          rawFilterErr === '2' || 
-          rawFilterErr.toLowerCase().includes('cancel') ||
-          rawFilterErr.toLowerCase().includes('denied')
-        ) {
-          throw filterErr;
-        }
-
-        this.addLog('SYS', 'Unknown', '', 'กำลังลองสแกนอุปกรณ์บลูทูธทั้งหมดรอบตัว...');
+      if (isIOS) {
+        // Bluefy/iOS: Use acceptAllDevices directly to avoid CoreBluetooth filter parsing exception
+        this.addLog('SYS', 'Unknown', '', 'ตรวจพบ iPad/Bluefy: กำลังเปิดหน้าต่างเลือกอุปกรณ์บลูทูธ...');
         this.device = await (navigator as any).bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices
+          optionalServices: CLEAN_OPTIONAL_SERVICES
         });
+      } else {
+        // Desktop / Android: Try name filters first, fallback to acceptAllDevices
+        try {
+          this.device = await (navigator as any).bluetooth.requestDevice({
+            filters: [
+              { namePrefix: 'FS' },
+              { namePrefix: 'FitShow' }
+            ],
+            optionalServices: CLEAN_OPTIONAL_SERVICES
+          });
+        } catch (filterErr: any) {
+          const errMsg = String(filterErr?.message || filterErr || '');
+          if (errMsg.toLowerCase().includes('cancel') || errMsg.toLowerCase().includes('cancelled')) {
+            throw filterErr;
+          }
+          this.addLog('SYS', 'Unknown', '', 'สลับไปค้นหาแบบเปิดรับทุกอุปกรณ์...');
+          this.device = await (navigator as any).bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: CLEAN_OPTIONAL_SERVICES
+          });
+        }
       }
 
       this.deviceName = this.device.name || 'FitShow Treadmill';
@@ -142,7 +144,7 @@ class TreadmillBluetoothService {
       // Request Screen Wake Lock so screen doesn't turn off
       await this.requestWakeLock();
 
-      // Try discovering standard FTMS (0x1826) first
+      // Try discovering standard FTMS first
       let serviceConnected = false;
       try {
         const ftmsService = await this.server.getPrimaryService(UUID_FTMS_SERVICE);
@@ -171,13 +173,7 @@ class TreadmillBluetoothService {
       // If FTMS not found, try FitShow Proprietary (0xFFF0)
       if (!serviceConnected) {
         try {
-          let fitshowService: any;
-          try {
-            fitshowService = await this.server.getPrimaryService(UUID_FITSHOW_SERVICE_16);
-          } catch {
-            fitshowService = await this.server.getPrimaryService(UUID_FITSHOW_SERVICE_128);
-          }
-
+          const fitshowService = await this.server.getPrimaryService(UUID_FITSHOW_SERVICE_128);
           this.protocol = 'FitShow_FFF0';
           this.addLog('SYS', 'FitShow_FFF0', '', 'พบ FitShow Proprietary Service (0xFFF0)');
 
