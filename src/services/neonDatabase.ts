@@ -1,5 +1,7 @@
 import { neon, neonConfig } from '@neondatabase/serverless';
 import type { WorkoutRecord, DatabaseStats } from '../types/database';
+import type { UserProfile, WorkoutGoal } from '../types/treadmill';
+import type { WorkoutProgram } from '../types/workout';
 
 // Disable browser warning for personal client app
 neonConfig.disableWarningInBrowsers = true;
@@ -103,6 +105,252 @@ class NeonDatabaseService {
     await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_age INTEGER;`;
     await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_gender TEXT;`;
     await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_bmi NUMERIC;`;
+
+    // Create treadmill_profiles table in Neon
+    await sql`
+      CREATE TABLE IF NOT EXISTS treadmill_profiles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        avatar TEXT NOT NULL DEFAULT '🏃‍♂️',
+        weight_kg NUMERIC NOT NULL DEFAULT 70,
+        height_cm NUMERIC NOT NULL DEFAULT 170,
+        age INTEGER NOT NULL DEFAULT 25,
+        gender TEXT NOT NULL DEFAULT 'other',
+        default_start_speed NUMERIC DEFAULT 3.0,
+        favorite_speeds JSONB DEFAULT '[]'::jsonb,
+        favorite_inclines JSONB DEFAULT '[]'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+
+    // Create treadmill_goals table in Neon
+    await sql`
+      CREATE TABLE IF NOT EXISTS treadmill_goals (
+        user_id TEXT PRIMARY KEY,
+        goal_type TEXT NOT NULL DEFAULT 'distance',
+        target NUMERIC NOT NULL DEFAULT 5.0,
+        title TEXT NOT NULL DEFAULT 'วิ่งระยะทาง 5.0 km',
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+
+    // Create treadmill_programs table in Neon
+    await sql`
+      CREATE TABLE IF NOT EXISTS treadmill_programs (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        subtitle TEXT,
+        category TEXT NOT NULL,
+        description TEXT,
+        total_duration_seconds INTEGER NOT NULL,
+        difficulty TEXT NOT NULL,
+        target_zone TEXT,
+        badge TEXT,
+        steps JSONB NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+  }
+
+  // ==========================================
+  // PROFILE CRUD (100% Neon Database Driven)
+  // ==========================================
+  public async getProfiles(): Promise<UserProfile[]> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        const rows = await sql`
+          SELECT * FROM treadmill_profiles ORDER BY created_at ASC;
+        `;
+        if (rows && rows.length > 0) {
+          return rows.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            avatar: r.avatar || '🏃‍♂️',
+            weightKg: Number(r.weight_kg) || 70,
+            heightCm: Number(r.height_cm) || 170,
+            age: Number(r.age) || 25,
+            gender: r.gender || 'other',
+            defaultStartSpeed: r.default_start_speed ? Number(r.default_start_speed) : 3.0,
+            favoriteSpeeds: Array.isArray(r.favorite_speeds)
+              ? r.favorite_speeds.map(Number)
+              : (typeof r.favorite_speeds === 'string' ? JSON.parse(r.favorite_speeds).map(Number) : [3.0, 5.0, 7.0, 9.0]),
+            favoriteInclines: Array.isArray(r.favorite_inclines)
+              ? r.favorite_inclines.map(Number)
+              : (typeof r.favorite_inclines === 'string' ? JSON.parse(r.favorite_inclines).map(Number) : [0, 2, 4, 6]),
+          }));
+        }
+      } catch (err) {
+        console.warn('Neon getProfiles error:', err);
+      }
+    }
+    return [];
+  }
+
+  public async saveProfile(p: UserProfile): Promise<void> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        const favSpeedsJson = JSON.stringify(p.favoriteSpeeds || [3.0, 5.0, 7.0, 9.0]);
+        const favInclinesJson = JSON.stringify(p.favoriteInclines || [0, 2, 4, 6]);
+
+        await sql`
+          INSERT INTO treadmill_profiles (
+            id, name, avatar, weight_kg, height_cm, age, gender, default_start_speed, favorite_speeds, favorite_inclines, updated_at
+          ) VALUES (
+            ${p.id}, ${p.name}, ${p.avatar || '🏃‍♂️'}, ${p.weightKg}, ${p.heightCm}, ${p.age}, ${p.gender},
+            ${p.defaultStartSpeed || 3.0}, ${favSpeedsJson}::jsonb, ${favInclinesJson}::jsonb, NOW()
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            avatar = EXCLUDED.avatar,
+            weight_kg = EXCLUDED.weight_kg,
+            height_cm = EXCLUDED.height_cm,
+            age = EXCLUDED.age,
+            gender = EXCLUDED.gender,
+            default_start_speed = EXCLUDED.default_start_speed,
+            favorite_speeds = EXCLUDED.favorite_speeds,
+            favorite_inclines = EXCLUDED.favorite_inclines,
+            updated_at = NOW();
+        `;
+      } catch (err) {
+        console.error('Neon saveProfile error:', err);
+      }
+    }
+  }
+
+  public async deleteProfile(id: string): Promise<void> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await sql`DELETE FROM treadmill_profiles WHERE id = ${id};`;
+        await sql`DELETE FROM treadmill_goals WHERE user_id = ${id};`;
+      } catch (err) {
+        console.error('Neon deleteProfile error:', err);
+      }
+    }
+  }
+
+  // ==========================================
+  // GOAL CRUD (100% Neon Database Driven)
+  // ==========================================
+  public async getGoal(userId: string): Promise<WorkoutGoal | null> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        const rows = await sql`
+          SELECT * FROM treadmill_goals WHERE user_id = ${userId} LIMIT 1;
+        `;
+        if (rows && rows.length > 0) {
+          const r = rows[0];
+          return {
+            type: r.goal_type as any,
+            target: Number(r.target),
+            title: r.title,
+          };
+        }
+      } catch (err) {
+        console.warn('Neon getGoal error:', err);
+      }
+    }
+    return null;
+  }
+
+  public async saveGoal(userId: string, goal: WorkoutGoal): Promise<void> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        await sql`
+          INSERT INTO treadmill_goals (user_id, goal_type, target, title, updated_at)
+          VALUES (${userId}, ${goal.type}, ${goal.target}, ${goal.title}, NOW())
+          ON CONFLICT (user_id) DO UPDATE SET
+            goal_type = EXCLUDED.goal_type,
+            target = EXCLUDED.target,
+            title = EXCLUDED.title,
+            updated_at = NOW();
+        `;
+      } catch (err) {
+        console.error('Neon saveGoal error:', err);
+      }
+    }
+  }
+
+  // ==========================================
+  // PROGRAM CRUD (100% Neon Database Driven)
+  // ==========================================
+  public async getPrograms(): Promise<WorkoutProgram[]> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        const rows = await sql`
+          SELECT * FROM treadmill_programs ORDER BY created_at ASC;
+        `;
+        if (rows && rows.length > 0) {
+          return rows.map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            subtitle: r.subtitle || '',
+            category: r.category as any,
+            description: r.description || '',
+            totalDurationSeconds: Number(r.total_duration_seconds),
+            difficulty: r.difficulty as any,
+            targetZone: r.target_zone || '',
+            badge: r.badge || '',
+            steps: Array.isArray(r.steps) ? r.steps : (typeof r.steps === 'string' ? JSON.parse(r.steps) : []),
+          }));
+        }
+      } catch (err) {
+        console.warn('Neon getPrograms error:', err);
+      }
+    }
+    return [];
+  }
+
+  public async saveProgram(p: WorkoutProgram): Promise<void> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        const stepsJson = JSON.stringify(p.steps);
+        await sql`
+          INSERT INTO treadmill_programs (
+            id, title, subtitle, category, description, total_duration_seconds, difficulty, target_zone, badge, steps
+          ) VALUES (
+            ${p.id}, ${p.title}, ${p.subtitle}, ${p.category}, ${p.description}, ${p.totalDurationSeconds},
+            ${p.difficulty}, ${p.targetZone}, ${p.badge}, ${stepsJson}::jsonb
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            title = EXCLUDED.title,
+            subtitle = EXCLUDED.subtitle,
+            category = EXCLUDED.category,
+            description = EXCLUDED.description,
+            total_duration_seconds = EXCLUDED.total_duration_seconds,
+            difficulty = EXCLUDED.difficulty,
+            target_zone = EXCLUDED.target_zone,
+            badge = EXCLUDED.badge,
+            steps = EXCLUDED.steps;
+        `;
+      } catch (err) {
+        console.error('Neon saveProgram error:', err);
+      }
+    }
+  }
+
+  public async deleteProgram(id: string): Promise<void> {
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await sql`DELETE FROM treadmill_programs WHERE id = ${id};`;
+      } catch (err) {
+        console.error('Neon deleteProgram error:', err);
+      }
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Dumbbell, 
@@ -7,10 +7,11 @@ import {
   Play, 
   Plus, 
   Trash2, 
-  Languages 
+  Languages,
+  Loader2
 } from 'lucide-react';
 import type { WorkoutProgram, WorkoutStep } from '../types/workout';
-import { WORKOUT_PROGRAMS } from '../data/programs';
+import { neonDatabase } from '../services/neonDatabase';
 
 interface WorkoutProgramsModalProps {
   isOpen: boolean;
@@ -28,6 +29,19 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
   onChangeLanguage,
 }) => {
   const [activeTab, setActiveTab] = useState<'catalog' | 'custom'>('catalog');
+  const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch training programs directly from Neon Database (0% Hardcoded)
+  useEffect(() => {
+    if (isOpen) {
+      setIsLoading(true);
+      neonDatabase.getPrograms().then((res) => {
+        setPrograms(res);
+        setIsLoading(false);
+      }).catch(() => setIsLoading(false));
+    }
+  }, [isOpen]);
 
   // Custom workout creator state
   const [customTitle, setCustomTitle] = useState('My Custom Workout');
@@ -62,12 +76,12 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
     setCustomSteps(updated);
   };
 
-  const handleStartCustomWorkout = () => {
+  const handleStartCustomWorkout = async () => {
     const totalDuration = customSteps.reduce((acc, s) => acc + s.durationSeconds, 0);
     const customProgram: WorkoutProgram = {
       id: `custom_${Date.now()}`,
       title: customTitle || 'Custom Workout',
-      subtitle: 'โปรแกรมออกแบบเอง',
+      subtitle: 'โปรแกรมออกแบบเอง (บันทึกบน Neon DB)',
       category: 'custom',
       difficulty: 'Intermediate',
       badge: '⚙️ CUSTOM',
@@ -76,8 +90,20 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
       totalDurationSeconds: totalDuration,
       steps: customSteps
     };
+    await neonDatabase.saveProgram(customProgram);
+    const updated = await neonDatabase.getPrograms();
+    setPrograms(updated);
     onSelectProgram(customProgram);
     onClose();
+  };
+
+  const handleDeleteProgram = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('คุณต้องการลบโปรแกรมนี้ออกจาก Neon DB ใช่หรือไม่?')) {
+      await neonDatabase.deleteProgram(id);
+      const updated = await neonDatabase.getPrograms();
+      setPrograms(updated);
+    }
   };
 
   return (
@@ -142,7 +168,7 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
                 : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-750'
             }`}
           >
-            คอร์สฝึกมาตรฐาน (4 โปรแกรม)
+            คอร์สฝึกจาก Neon Database ({programs.length} โปรแกรม)
           </button>
           <button
             onClick={() => setActiveTab('custom')}
@@ -159,59 +185,81 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
         {/* Tab 1: Catalog */}
         {activeTab === 'catalog' && (
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {WORKOUT_PROGRAMS.map((prog) => (
-              <div
-                key={prog.id}
-                className="rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 p-4 transition-all hover:bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs px-2 py-0.5 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      {prog.badge}
-                    </span>
-                    <h3 className="text-base font-bold text-white">
-                      {prog.title}
-                    </h3>
-                    <span className="text-xs text-slate-500 font-medium">
-                      • {prog.difficulty}
-                    </span>
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center p-12 text-slate-400 gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                <span className="text-xs">กำลังโหลดคอร์สฝึกจาก Neon PostgreSQL...</span>
+              </div>
+            ) : programs.length === 0 ? (
+              <div className="text-center p-8 text-slate-400 text-xs">
+                ยังไม่มีโปรแกรมในฐานข้อมูล
+              </div>
+            ) : (
+              programs.map((prog) => (
+                <div
+                  key={prog.id}
+                  className="rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 p-4 transition-all hover:bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs px-2 py-0.5 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        {prog.badge}
+                      </span>
+                      <h3 className="text-base font-bold text-white">
+                        {prog.title}
+                      </h3>
+                      <span className="text-xs text-slate-500 font-medium">
+                        • {prog.difficulty}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 font-medium">
+                      {prog.subtitle}
+                    </p>
+
+                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {prog.description}
+                    </p>
+
+                    <div className="flex items-center gap-4 text-xs text-slate-400 pt-1">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>{Math.round(prog.totalDurationSeconds / 60)} นาที</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Mountain className="w-3.5 h-3.5 text-orange-400" />
+                        <span>{prog.targetZone}</span>
+                      </span>
+                      <span className="text-slate-500">
+                        {prog.steps.length} สเต็ป
+                      </span>
+                    </div>
                   </div>
 
-                  <p className="text-xs text-slate-300 font-medium">
-                    {prog.subtitle}
-                  </p>
-
-                  <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                    {prog.description}
-                  </p>
-
-                  <div className="flex items-center gap-4 text-xs text-slate-400 pt-1">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>{Math.round(prog.totalDurationSeconds / 60)} นาที</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Mountain className="w-3.5 h-3.5 text-orange-400" />
-                      <span>{prog.targetZone}</span>
-                    </span>
-                    <span className="text-slate-500">
-                      {prog.steps.length} สเต็ป
-                    </span>
+                  <div className="flex items-center gap-2">
+                    {prog.category === 'custom' && (
+                      <button
+                        onClick={(e) => handleDeleteProgram(prog.id, e)}
+                        className="p-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                        title="ลบโปรแกรมที่สร้างเองนี้ออกจาก Neon DB"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        onSelectProgram(prog);
+                        onClose();
+                      }}
+                      className="py-2.5 px-5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-slate-950" />
+                      <span>เริ่มคอร์สนี้</span>
+                    </button>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => {
-                    onSelectProgram(prog);
-                    onClose();
-                  }}
-                  className="px-5 py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/10 cursor-pointer shrink-0 active:scale-95"
-                >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>เริ่มซ้อม</span>
-                </button>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 

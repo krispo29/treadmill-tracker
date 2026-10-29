@@ -48,83 +48,6 @@ import { DiagnosticDrawer } from './components/DiagnosticDrawer';
 import { GiantRunningHud } from './components/GiantRunningHud';
 import { WorkoutRecapModal } from './components/WorkoutRecapModal';
 
-const DEFAULT_PROFILES: UserProfile[] = [
-  { 
-    id: 'p_runner1', 
-    name: 'Mike', 
-    avatar: '🏃‍♂️', 
-    weightKg: 70, 
-    heightCm: 175, 
-    age: 28, 
-    gender: 'male',
-    defaultStartSpeed: 3.5,
-    favoriteSpeeds: [3.5, 6.5, 8.5, 10.5],
-    favoriteInclines: [0, 2, 4, 8],
-  },
-  { 
-    id: 'p_runner2', 
-    name: 'Joy', 
-    avatar: '🏃‍♀️', 
-    weightKg: 54, 
-    heightCm: 162, 
-    age: 26, 
-    gender: 'female',
-    defaultStartSpeed: 3.0,
-    favoriteSpeeds: [3.0, 4.5, 5.5, 7.0],
-    favoriteInclines: [0, 2, 5, 12],
-  },
-  { 
-    id: 'p_runner3', 
-    name: 'Dad', 
-    avatar: '🦁', 
-    weightKg: 75, 
-    heightCm: 170, 
-    age: 58, 
-    gender: 'male',
-    defaultStartSpeed: 2.5,
-    favoriteSpeeds: [2.5, 3.2, 4.0, 4.8],
-    favoriteInclines: [0, 1, 3, 5],
-  },
-];
-
-// Helper to ensure saved profiles have favorite speeds migrated
-const ensureProfileFavorites = (p: UserProfile): UserProfile => {
-  if (p.favoriteSpeeds && p.favoriteSpeeds.length > 0 && p.defaultStartSpeed) {
-    return p;
-  }
-  const nameLower = p.name.toLowerCase();
-  if (nameLower === 'mike') {
-    return {
-      ...p,
-      defaultStartSpeed: p.defaultStartSpeed ?? 3.5,
-      favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [3.5, 6.5, 8.5, 10.5],
-      favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 2, 4, 8],
-    };
-  }
-  if (nameLower === 'joy') {
-    return {
-      ...p,
-      defaultStartSpeed: p.defaultStartSpeed ?? 3.0,
-      favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [3.0, 4.5, 5.5, 7.0],
-      favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 2, 5, 12],
-    };
-  }
-  if (nameLower === 'dad' || p.name.includes('พ่อ')) {
-    return {
-      ...p,
-      defaultStartSpeed: p.defaultStartSpeed ?? 2.5,
-      favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [2.5, 3.2, 4.0, 4.8],
-      favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 1, 3, 5],
-    };
-  }
-  return {
-    ...p,
-    defaultStartSpeed: p.defaultStartSpeed ?? 3.0,
-    favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [3.0, 5.0, 7.0, 9.0],
-    favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 2, 4, 6],
-  };
-};
-
 export const App: React.FC = () => {
   const [metrics, setMetrics] = useState<TreadmillMetrics>({
     speedKmh: 0,
@@ -166,34 +89,69 @@ export const App: React.FC = () => {
   const wasRunningRef = useRef<boolean>(false);
   const autoSaveDebounceRef = useRef<boolean>(false);
 
-  // Multi-Profile Management (No login required)
-  const [profiles, setProfiles] = useState<UserProfile[]>(() => {
-    const saved = localStorage.getItem('treadmill_multi_profiles');
-    if (saved) {
-      try {
-        const parsed: UserProfile[] = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(ensureProfileFavorites);
-        }
-      } catch {}
-    }
-    return DEFAULT_PROFILES;
-  });
-
+  // Multi-Profile Management (100% Neon Database Driven - Zero Hardcode)
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string>(() => {
-    const savedId = localStorage.getItem('treadmill_active_profile_id');
-    return savedId || 'p_runner1';
+    return localStorage.getItem('treadmill_active_profile_id') || 'p_runner1';
   });
 
-  const activeProfile: UserProfile = profiles.find(p => p.id === activeProfileId) || profiles[0] || DEFAULT_PROFILES[0];
-
-  // Active workout goal stored in localStorage
-  const [goal, setGoal] = useState<WorkoutGoal>(() => {
-    const saved = localStorage.getItem('treadmill_workout_goal');
-    return saved
-      ? JSON.parse(saved)
-      : { type: 'distance', target: 5.0, title: 'วิ่งระยะทาง 5.0 km' };
+  // Active workout goal (100% Neon Database Driven)
+  const [goal, setGoal] = useState<WorkoutGoal>({
+    type: 'distance',
+    target: 5.0,
+    title: 'วิ่งระยะทาง 5.0 km'
   });
+
+  // Load all Profiles from Neon PostgreSQL
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      try {
+        const dbProfiles = await neonDatabase.getProfiles();
+        if (dbProfiles && dbProfiles.length > 0) {
+          setProfiles(dbProfiles);
+          const savedActiveId = localStorage.getItem('treadmill_active_profile_id');
+          if (savedActiveId && dbProfiles.some(p => p.id === savedActiveId)) {
+            setActiveProfileId(savedActiveId);
+          } else {
+            setActiveProfileId(dbProfiles[0].id);
+            localStorage.setItem('treadmill_active_profile_id', dbProfiles[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Neon getProfiles error:', err);
+      }
+    };
+    fetchProfiles();
+  }, []);
+
+  const activeProfile: UserProfile = profiles.find(p => p.id === activeProfileId) || profiles[0] || {
+    id: 'p_runner1',
+    name: 'Runner',
+    avatar: '🏃‍♂️',
+    weightKg: 70,
+    heightCm: 170,
+    age: 28,
+    gender: 'male',
+    defaultStartSpeed: 3.0,
+    favoriteSpeeds: [3.0, 5.0, 7.0, 9.0],
+    favoriteInclines: [0, 2, 4, 6]
+  };
+
+  // Load active runner's personal goal from Neon Database
+  useEffect(() => {
+    if (!activeProfile.id) return;
+    const fetchGoal = async () => {
+      try {
+        const dbGoal = await neonDatabase.getGoal(activeProfile.id);
+        if (dbGoal) {
+          setGoal(dbGoal);
+        }
+      } catch (err) {
+        console.warn('Neon getGoal error:', err);
+      }
+    };
+    fetchGoal();
+  }, [activeProfile.id]);
 
   // Workout Execution Engine State
   const [workoutState, setWorkoutState] = useState<WorkoutState>({
@@ -389,38 +347,33 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleUpdateActiveFavorites = (newFavorites: number[]) => {
+  const handleUpdateActiveFavorites = async (newFavorites: number[]) => {
     const updatedProfile = { ...activeProfile, favoriteSpeeds: newFavorites };
-    handleSaveProfile(updatedProfile);
-    setSaveSuccessMsg(`⭐ บันทึกสปีดโปรดของ ${activeProfile.name} แล้ว (${newFavorites.map(s => s.toFixed(1)).join(', ')} km/h)`);
+    await handleSaveProfile(updatedProfile);
+    setSaveSuccessMsg(`⭐ บันทึกลง Neon: สปีดโปรดของ ${activeProfile.name} (${newFavorites.map(s => s.toFixed(1)).join(', ')} km/h)`);
     setTimeout(() => setSaveSuccessMsg(null), 3500);
   };
 
-  const handleSaveProfile = (p: UserProfile) => {
-    const existingIndex = profiles.findIndex(item => item.id === p.id);
-    let updated: UserProfile[];
-    if (existingIndex >= 0) {
-      updated = [...profiles];
-      updated[existingIndex] = p;
-    } else {
-      updated = [...profiles, p];
-    }
+  const handleSaveProfile = async (p: UserProfile) => {
+    await neonDatabase.saveProfile(p);
+    const updated = await neonDatabase.getProfiles();
     setProfiles(updated);
-    localStorage.setItem('treadmill_multi_profiles', JSON.stringify(updated));
   };
 
-  const handleDeleteProfile = (id: string) => {
-    const updated = profiles.filter(p => p.id !== id);
+  const handleDeleteProfile = async (id: string) => {
+    await neonDatabase.deleteProfile(id);
+    const updated = await neonDatabase.getProfiles();
     setProfiles(updated);
-    localStorage.setItem('treadmill_multi_profiles', JSON.stringify(updated));
     if (activeProfileId === id && updated.length > 0) {
       handleSelectProfile(updated[0].id);
     }
   };
 
-  const handleSaveGoal = (newGoal: WorkoutGoal) => {
+  const handleSaveGoal = async (newGoal: WorkoutGoal) => {
     setGoal(newGoal);
-    localStorage.setItem('treadmill_workout_goal', JSON.stringify(newGoal));
+    if (activeProfile.id) {
+      await neonDatabase.saveGoal(activeProfile.id, newGoal);
+    }
   };
 
   const handleSetSpeed = (spd: number) => {
