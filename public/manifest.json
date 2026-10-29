@@ -1,0 +1,17 @@
+{
+  "name": "Treadmill Pro Tracker",
+  "short_name": "TreadmillPro",
+  "description": "Scientific Bluetooth Treadmill Tracker for Incline 0-20 & Speed 0-16",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

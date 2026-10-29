@@ -1,0 +1,119 @@
+import React, { useState } from 'react';
+import { Terminal, ChevronDown, ChevronUp, Copy, Trash2, Check } from 'lucide-react';
+import type { PacketLog } from '../types/treadmill';
+
+interface DiagnosticDrawerProps {
+  logs: PacketLog[];
+  onClearLogs: () => void;
+}
+
+export const DiagnosticDrawer: React.FC<DiagnosticDrawerProps> = ({ logs, onClearLogs }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLogs = () => {
+    const text = logs
+      .map(l => `[${l.timestamp}] [${l.direction}] [${l.protocol}] ${l.hex ? 'HEX: ' + l.hex : ''} ${l.decodedSummary || ''}`)
+      .join('\n');
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-slate-800 shadow-2xl backdrop-blur-lg transition-all duration-300">
+      {/* Bar Header */}
+      <div
+        className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-slate-900/60 transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+          <Terminal className="w-4 h-4 text-cyan-400" />
+          <span>Bluetooth Packet Inspector & Logs</span>
+          <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px]">
+            {logs.length} รายการ
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isOpen ? (
+            <ChevronDown className="w-4 h-4 text-slate-400" />
+          ) : (
+            <ChevronUp className="w-4 h-4 text-slate-400" />
+          )}
+        </div>
+      </div>
+
+      {/* Expanded Log Drawer */}
+      {isOpen && (
+        <div className="max-w-7xl mx-auto px-4 pb-4">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs">
+            <span className="text-slate-400">
+              บันทึก Raw Hex Data จากลู่วิ่ง FS-01BD59-A แบบ Real-time
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopyLogs();
+                }}
+                className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1 cursor-pointer"
+                title="คัดลอก Logs ทั้งหมด"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClearLogs();
+                }}
+                className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-rose-300 flex items-center gap-1 cursor-pointer"
+                title="ล้าง Logs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ล้าง</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Logs Viewport */}
+          <div className="h-48 overflow-y-auto font-mono text-xs space-y-1 p-2 rounded-lg bg-black/70 border border-slate-800/80">
+            {logs.length === 0 ? (
+              <div className="text-slate-600 text-center py-6">
+                ยังไม่มีข้อมูล (เมื่อกดเชื่อมต่อลู่วิ่ง ข้อมูล Hex Packet จะแสดงที่นี่)
+              </div>
+            ) : (
+              logs.slice().reverse().map((log) => (
+                <div key={log.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
+                  <span className="text-slate-500 whitespace-nowrap">[{log.timestamp}]</span>
+                  <span
+                    className={`px-1 rounded text-[10px] font-bold ${
+                      log.direction === 'RX'
+                        ? 'bg-cyan-500/20 text-cyan-400'
+                        : log.direction === 'TX'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-indigo-500/20 text-indigo-300'
+                    }`}
+                  >
+                    {log.direction}
+                  </span>
+                  {log.hex && (
+                    <span className="text-emerald-400 font-semibold tracking-wide">
+                      {log.hex}
+                    </span>
+                  )}
+                  {log.decodedSummary && (
+                    <span className="text-slate-300">
+                      → {log.decodedSummary}
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
