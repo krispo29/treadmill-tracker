@@ -61,6 +61,22 @@ class AudioCoachService {
     this.playTone(freq, 0.18, 'triangle');
   }
 
+  /**
+   * Crisp tactile tap sound for button clicks while running
+   */
+  public playButtonTapSound() {
+    if (!this.soundEnabled) return;
+    this.playTone(820, 0.04, 'triangle');
+  }
+
+  /**
+   * Distinctive stop sound when stopping treadmill
+   */
+  public playStopSound() {
+    if (!this.soundEnabled) return;
+    this.playTone(400, 0.16, 'sine');
+  }
+
   public playIntervalChangeBeep() {
     if (!this.soundEnabled) return;
     this.initAudio();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bluetooth, BluetoothOff, Monitor, Dumbbell, History, ChevronDown } from 'lucide-react';
+import { Bluetooth, BluetoothOff, Monitor, Dumbbell, History, ChevronDown, Maximize2 } from 'lucide-react';
 import type { BluetoothProtocol, ConnectionStatus, UserProfile } from '../types/treadmill';
 
 interface HeaderProps {
@@ -15,6 +15,7 @@ interface HeaderProps {
   onOpenWorkouts: () => void;
   onOpenHistory: () => void;
   onResetSession: () => void;
+  onOpenGiantHud: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,7 +30,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenProfileManager,
   onOpenWorkouts,
   onOpenHistory,
-  onResetSession
+  onResetSession,
+  onOpenGiantHud
 }) => {
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 px-4 py-3 sm:px-6">
@@ -116,6 +118,16 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <History className="w-3.5 h-3.5 text-cyan-400" />
             <span>ประวัติ & สถิติ</span>
+          </button>
+
+          {/* Giant Running HUD Toggle */}
+          <button
+            onClick={onOpenGiantHud}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 text-cyan-300 border border-cyan-500/40 transition-all cursor-pointer shadow-sm active:scale-95"
+            title="เปิดหน้าจอวิ่งขนาดยักษ์ (Giant HUD)"
+          >
+            <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
+            <span>จอวิ่งยักษ์</span>
           </button>
 
           {/* Simulation Toggle */}

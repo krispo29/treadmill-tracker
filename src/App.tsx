@@ -45,6 +45,7 @@ import { HistoryAnalyticsModal } from './components/HistoryAnalyticsModal';
 import { NeonSettingsModal } from './components/NeonSettingsModal';
 import { ProfileManagerModal } from './components/ProfileManagerModal';
 import { DiagnosticDrawer } from './components/DiagnosticDrawer';
+import { GiantRunningHud } from './components/GiantRunningHud';
 
 const DEFAULT_PROFILES: UserProfile[] = [
   { id: 'p_runner1', name: 'Mike', avatar: '🏃‍♂️', weightKg: 70, heightCm: 175, age: 28, gender: 'male' },
@@ -75,6 +76,7 @@ export const App: React.FC = () => {
   const [isWorkoutsModalOpen, setIsWorkoutsModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isNeonModalOpen, setIsNeonModalOpen] = useState(false);
+  const [isGiantHudOpen, setIsGiantHudOpen] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
@@ -321,6 +323,7 @@ export const App: React.FC = () => {
 
   const handleStartTreadmill = (spd: number = 3.0) => {
     bluetoothService.startTreadmill(spd);
+    setIsGiantHudOpen(true);
   };
 
   const handleStopTreadmill = async () => {
@@ -466,6 +469,7 @@ export const App: React.FC = () => {
         onOpenWorkouts={() => setIsWorkoutsModalOpen(true)}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
         onResetSession={handleResetSession}
+        onOpenGiantHud={() => setIsGiantHudOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -721,6 +725,31 @@ export const App: React.FC = () => {
       <NeonSettingsModal
         isOpen={isNeonModalOpen}
         onClose={() => setIsNeonModalOpen(false)}
+      />
+
+      {/* Floating 1-Tap Giant HUD Launcher Button */}
+      {!isGiantHudOpen && (
+        <button
+          onClick={() => setIsGiantHudOpen(true)}
+          className="fixed bottom-5 right-5 z-30 px-4 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2.5 shadow-2xl shadow-cyan-500/30 border border-cyan-300/40 cursor-pointer active:scale-95 transition-all"
+          title="เปิดหน้าจอวิ่งขนาดยักษ์ มองชัด 1 เมตร"
+        >
+          <Maximize2 className="w-4 h-4" />
+          <span>📺 จอวิ่งยักษ์ (Giant HUD)</span>
+        </button>
+      )}
+
+      {/* Giant Running HUD Fullscreen Cockpit */}
+      <GiantRunningHud
+        isOpen={isGiantHudOpen}
+        onClose={() => setIsGiantHudOpen(false)}
+        metrics={metrics}
+        activeProfile={activeProfile}
+        onSetSpeed={handleSetSpeed}
+        onSetIncline={handleSetIncline}
+        onStart={handleStartTreadmill}
+        onStop={handleStopTreadmill}
+        deviceName={deviceName}
       />
 
       {/* Bluetooth Error / Permission Guide Modal */}
