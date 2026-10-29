@@ -88,23 +88,45 @@ class TreadmillBluetoothService {
       this.updateStatus('searching', 'Unknown');
       this.addLog('SYS', 'Unknown', '', 'กำลังสแกนหาอุปกรณ์ลู่วิ่ง...');
 
-      // Scan for FS- prefix or Fitness Machine services
-      this.device = await (navigator as any).bluetooth.requestDevice({
-        filters: [
-          { namePrefix: 'FS-' },
-          { namePrefix: 'Fs-' },
-          { namePrefix: 'fs-' },
-          { namePrefix: 'FitShow' },
-          { services: [UUID_FTMS_SERVICE] }
-        ],
-        optionalServices: [
-          UUID_FTMS_SERVICE,
-          UUID_FITSHOW_SERVICE_16,
-          UUID_FITSHOW_SERVICE_128,
-          0x180d, // Heart Rate Service
-          'generic_access'
-        ]
-      });
+      const optionalServices = [
+        UUID_FTMS_SERVICE,
+        '00001826-0000-1000-8000-00805f9b34fb',
+        UUID_FITSHOW_SERVICE_16,
+        UUID_FITSHOW_SERVICE_128,
+        0x180d, // Heart Rate Service
+        '0000180d-0000-1000-8000-00805f9b34fb',
+        'generic_access'
+      ];
+
+      // Scan for FS- prefix or FitShow services, with fallback to acceptAllDevices
+      try {
+        this.device = await (navigator as any).bluetooth.requestDevice({
+          filters: [
+            { namePrefix: 'FS' },
+            { namePrefix: 'fs' },
+            { namePrefix: 'Fs' },
+            { namePrefix: 'FitShow' },
+            { namePrefix: 'fitshow' },
+          ],
+          optionalServices
+        });
+      } catch (filterErr: any) {
+        const rawFilterErr = String(filterErr?.message || filterErr || '');
+        // If user explicitly cancelled or permission was denied (Error 2), don't retry
+        if (
+          rawFilterErr === '2' || 
+          rawFilterErr.toLowerCase().includes('cancel') ||
+          rawFilterErr.toLowerCase().includes('denied')
+        ) {
+          throw filterErr;
+        }
+
+        this.addLog('SYS', 'Unknown', '', 'กำลังลองสแกนอุปกรณ์บลูทูธทั้งหมดรอบตัว...');
+        this.device = await (navigator as any).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices
+        });
+      }
 
       this.deviceName = this.device.name || 'FitShow Treadmill';
       this.addLog('SYS', 'Unknown', '', `พบอุปกรณ์: ${this.deviceName} กำลังเชื่อมต่อ...`);
@@ -187,9 +209,19 @@ class TreadmillBluetoothService {
 
     } catch (error: any) {
       console.error('Bluetooth connection error:', error);
+      const rawError = String(error?.message || error || '');
       this.updateStatus('error', 'Unknown');
-      this.addLog('SYS', 'Unknown', '', `ข้อผิดพลาด: ${error.message || error}`);
       this.releaseWakeLock();
+
+      let friendlyError = `ข้อผิดพลาด: ${rawError}`;
+      if (rawError === '2' || rawError.includes('denied') || rawError.includes('unauthorized')) {
+        friendlyError = 'iPad ยังไม่อนุญาตบลูทูธให้แอป Bluefy (Error 2): โปรดไปที่ การตั้งค่า iPad > Bluefy > เปิดสวิตช์ Bluetooth';
+      } else if (rawError.toLowerCase().includes('cancel') || rawError.toLowerCase().includes('cancelled')) {
+        friendlyError = 'ยกเลิกการเลือกอุปกรณ์บลูทูธ';
+      }
+
+      this.addLog('SYS', 'Unknown', '', friendlyError);
+      throw new Error(friendlyError);
     }
   }
 

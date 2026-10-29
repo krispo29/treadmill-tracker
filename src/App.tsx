@@ -9,7 +9,10 @@ import {
   Tablet,
   Save,
   Check,
-  Users
+  Users,
+  AlertTriangle,
+  X,
+  RotateCcw
 } from 'lucide-react';
 import type { 
   BluetoothProtocol, 
@@ -75,6 +78,11 @@ export const App: React.FC = () => {
   const [compactMode, setCompactMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [bluetoothError, setBluetoothError] = useState<{
+    code: string;
+    title: string;
+    message: string;
+  } | null>(null);
 
   // Peak tracking for stats
   const maxSpeedRef = useRef<number>(0);
@@ -222,10 +230,30 @@ export const App: React.FC = () => {
   }, []);
 
   const handleConnect = async () => {
+    setBluetoothError(null);
     try {
       await bluetoothService.connect();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Connection failed:', err);
+      const msg = String(err?.message || err || '');
+      if (
+        msg.includes('Error 2') || 
+        msg.includes('iPad ยังไม่อนุญาตบลูทูธ') || 
+        msg === '2' || 
+        msg.includes('denied')
+      ) {
+        setBluetoothError({
+          code: 'ERROR_2_PERMISSION',
+          title: 'iPad ยังไม่อนุญาตบลูทูธให้แอป Bluefy (Error: 2)',
+          message: 'ระบบ iPad ปฏิเสธการเข้าถึงสัญญาณบลูทูธ เนื่องจากยังไม่ได้เปิดสิทธิ์ในการตั้งค่าของ iPad'
+        });
+      } else if (!msg.toLowerCase().includes('ยกเลิก') && !msg.toLowerCase().includes('cancel')) {
+        setBluetoothError({
+          code: 'GENERAL_ERROR',
+          title: 'เกิดข้อผิดพลาดในการเชื่อมต่อ',
+          message: msg
+        });
+      }
     }
   };
 
@@ -700,6 +728,87 @@ export const App: React.FC = () => {
         isOpen={isNeonModalOpen}
         onClose={() => setIsNeonModalOpen(false)}
       />
+
+      {/* Bluetooth Error / Permission Guide Modal */}
+      {bluetoothError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 max-w-lg w-full shadow-2xl text-slate-100 relative">
+            <button
+              onClick={() => setBluetoothError(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1 pr-6">
+                <h3 className="text-lg font-bold text-white mb-1">
+                  {bluetoothError.title}
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  {bluetoothError.message}
+                </p>
+              </div>
+            </div>
+
+            {bluetoothError.code === 'ERROR_2_PERMISSION' ? (
+              <div className="bg-slate-850 rounded-xl p-4 border border-slate-800 space-y-3 mb-5 text-xs text-slate-300">
+                <div className="font-bold text-cyan-400 flex items-center gap-1.5">
+                  <span>📱 วิธีแก้ไขบน iPad ใน 3 ขั้นตอน:</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-2 leading-relaxed text-slate-200">
+                  <li>
+                    สลับไปที่หน้าจอหลัก แล้วเปิดแอป <strong className="text-white">"การตั้งค่า" (Settings)</strong> ของ iPad
+                  </li>
+                  <li>
+                    เลื่อนแถบด้านซ้ายลงไปล่างสุด แตะที่ชื่อแอป <strong className="text-cyan-300">"Bluefy"</strong>
+                    <br />
+                    <span className="text-[11px] text-slate-400 pl-4">
+                      (หรือไปที่ <em>ความเป็นส่วนตัวและความปลอดภัย &gt; บลูทูธ</em>)
+                    </span>
+                  </li>
+                  <li>
+                    แตะเปิดสวิตช์ <strong className="text-emerald-400">"บลูทูธ (Bluetooth)"</strong> ให้เป็นสีเขียว (ON)
+                  </li>
+                </ol>
+
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300/90 leading-relaxed">
+                  💡 <strong>ข้อควรระวัง:</strong> ในหน้า Settings &gt; Bluetooth ของ iPad หากมีชื่อลู่ <code className="text-white">FS-01BD59-A</code> เชื่อมต่ออยู่ ให้กดปุ่มตัว (i) สีฟ้า แล้วเลือก <strong>"ลืมอุปกรณ์นี้ (Forget This Device)"</strong> ก่อนนะครับ
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-850 rounded-xl p-4 border border-slate-800 mb-5 text-xs text-slate-300">
+                <p className="font-mono text-rose-400 mb-2">{bluetoothError.message}</p>
+                <p className="text-slate-400">
+                  โปรดตรวจสอบว่าเปิดลู่วิ่งไว้ และบลูทูธของ iPad ไม่ได้เชื่อมต่อค้างกับอุปกรณ์อื่น
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setBluetoothError(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 transition-colors"
+              >
+                ปิดหน้าต่าง
+              </button>
+              <button
+                onClick={() => {
+                  setBluetoothError(null);
+                  handleConnect();
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-500/20 active:scale-95"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>ลองเชื่อมต่ออีกครั้ง</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
