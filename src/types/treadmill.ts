@@ -6,6 +6,9 @@ export interface UserProfile {
   heightCm: number;
   age: number;
   gender: 'male' | 'female' | 'other';
+  defaultStartSpeed?: number;
+  favoriteSpeeds?: number[];
+  favoriteInclines?: number[];
 }
 
 export interface UserPhysiology {

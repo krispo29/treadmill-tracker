@@ -216,3 +216,28 @@ export function getNearestLandmark(elevationMeters: number): { current: Landmark
   }
   return { current: LANDMARKS[LANDMARKS.length - 1], progress: 100 };
 }
+
+export interface SpeedPillInfo {
+  label: string;
+  icon: string;
+  color: string;
+}
+
+export function getSpeedPillInfo(speed: number): SpeedPillInfo {
+  if (speed <= 3.2) {
+    return { label: 'เดินเบา', icon: '🚶', color: 'border-teal-500/40 bg-teal-950/40 text-teal-300 hover:bg-teal-900/40' };
+  }
+  if (speed <= 4.8) {
+    return { label: 'เดินเร็ว', icon: '🚶‍♂️', color: 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/40' };
+  }
+  if (speed <= 6.8) {
+    return { label: 'จ็อกกิ้ง', icon: '🏃', color: 'border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/40' };
+  }
+  if (speed <= 8.8) {
+    return { label: 'วิ่งสบาย', icon: '⚡', color: 'border-blue-500/40 bg-blue-950/40 text-blue-300 hover:bg-blue-900/40' };
+  }
+  if (speed <= 10.8) {
+    return { label: 'วิ่งเร็ว', icon: '🔥', color: 'border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-900/40' };
+  }
+  return { label: 'สปรินต์', icon: '🚀', color: 'border-rose-500/40 bg-rose-950/40 text-rose-300 hover:bg-rose-900/40' };
+}

@@ -53,7 +53,10 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({
       weightKg: 65,
       heightCm: 170,
       age: 25,
-      gender: 'male'
+      gender: 'male',
+      defaultStartSpeed: 3.0,
+      favoriteSpeeds: [3.0, 5.0, 7.0, 9.0],
+      favoriteInclines: [0, 2, 4, 6]
     });
     setIsAddingNew(true);
   };
@@ -156,6 +159,23 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({
                           <span>•</span>
                           <span className="text-cyan-400 font-mono">BMI {physio.bmi}</span>
                         </div>
+                        {p.favoriteSpeeds && p.favoriteSpeeds.length > 0 && (
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                            <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+                              ⭐ สปีดโปรด:
+                            </span>
+                            {p.favoriteSpeeds.map((s) => (
+                              <span key={s} className="px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-xs font-bold digital-number">
+                                {s.toFixed(1)}
+                              </span>
+                            ))}
+                            {p.defaultStartSpeed && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                (เริ่มเดิน: {p.defaultStartSpeed.toFixed(1)})
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -340,6 +360,64 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({
                   <option value="female">หญิง</option>
                   <option value="other">อื่นๆ</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Personal Favorite Speeds (Phase 2) */}
+            <div className="pt-3 border-t border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>ตั้งค่าสปีดโปรดประจำตัว (Favorite Speeds)</span>
+                </label>
+                <span className="text-[10px] text-slate-400">ปุ่มลัดสปีด 4 ระดับ</span>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">
+                  ความเร็วเริ่มต้นเมื่อกด Start (km/h)
+                </label>
+                <input
+                  type="number"
+                  min="1.0"
+                  max="12.0"
+                  step="0.1"
+                  value={editingProfile.defaultStartSpeed ?? 3.0}
+                  onChange={(e) => setEditingProfile({ ...editingProfile, defaultStartSpeed: parseFloat(e.target.value) || 3.0 })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm font-bold digital-number text-cyan-300 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1.5">
+                  ปุ่มลัดความเร็ว 4 ระดับ (เช่น เดิน, จ็อกกิ้ง, วิ่งสบาย, สปรินต์)
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[0, 1, 2, 3].map((idx) => {
+                    const currentVal = (editingProfile.favoriteSpeeds && editingProfile.favoriteSpeeds[idx]) ?? (3.0 + idx * 2.0);
+                    return (
+                      <div key={idx}>
+                        <span className="text-[10px] text-slate-500 block mb-1 text-center font-semibold">
+                          ระดับ {idx + 1}
+                        </span>
+                        <input
+                          type="number"
+                          min="1.0"
+                          max="16.0"
+                          step="0.1"
+                          value={currentVal}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 3.0;
+                            const prev = editingProfile.favoriteSpeeds ? [...editingProfile.favoriteSpeeds] : [3.0, 5.0, 7.0, 9.0];
+                            prev[idx] = val;
+                            setEditingProfile({ ...editingProfile, favoriteSpeeds: prev });
+                          }}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-2 text-center text-sm font-bold digital-number text-amber-300 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

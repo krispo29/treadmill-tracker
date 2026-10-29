@@ -573,15 +573,24 @@ class TreadmillBluetoothService {
    */
   private parseFTMSPacket(dataView: DataView): void {
     const hex = this.buf2hex(dataView.buffer);
-    if (dataView.byteLength < 4) return;
+    if (dataView.byteLength < 2) return;
 
     const flags = dataView.getUint16(0, true);
     let offset = 2;
 
-    // Instantaneous Speed (uint16, in 0.01 km/h)
-    const rawSpeed = dataView.getUint16(offset, true);
-    this.metrics.speedKmh = Number((rawSpeed / 100).toFixed(1));
-    offset += 2;
+    // Bit 0: More Data
+    // In Bluetooth SIG FTMS:
+    // 0 = Instantaneous Speed IS present (uint16, 0.01 km/h)
+    // 1 = Instantaneous Speed NOT present (secondary / continuation packet)
+    const hasInstantaneousSpeed = (flags & (1 << 0)) === 0;
+
+    if (hasInstantaneousSpeed) {
+      if (dataView.byteLength >= offset + 2) {
+        const rawSpeed = dataView.getUint16(offset, true);
+        this.metrics.speedKmh = Number((rawSpeed / 100).toFixed(1));
+        offset += 2;
+      }
+    }
 
     // Average Speed (bit 1)
     if (flags & (1 << 1)) {
@@ -594,7 +603,10 @@ class TreadmillBluetoothService {
         const d0 = dataView.getUint8(offset);
         const d1 = dataView.getUint8(offset + 1);
         const d2 = dataView.getUint8(offset + 2);
-        this.metrics.distanceMeters = d0 | (d1 << 8) | (d2 << 16);
+        const dist = d0 | (d1 << 8) | (d2 << 16);
+        if (dist > 0) {
+          this.metrics.distanceMeters = dist;
+        }
       }
       offset += 3;
     }
@@ -609,17 +621,68 @@ class TreadmillBluetoothService {
       offset += 4; // 2 for incline + 2 for ramp angle
     }
 
+    // Elevation Gain (bit 4)
+    if (flags & (1 << 4)) {
+      offset += 4; // 2 positive + 2 negative
+    }
+
+    // Instantaneous Pace (bit 5)
+    if (flags & (1 << 5)) {
+      offset += 1;
+    }
+
+    // Average Pace (bit 6)
+    if (flags & (1 << 6)) {
+      offset += 1;
+    }
+
+    // Expended Energy (bit 7)
+    if (flags & (1 << 7)) {
+      if (dataView.byteLength >= offset + 2) {
+        const energyKcal = dataView.getUint16(offset, true);
+        if (energyKcal > 0 && energyKcal < 65534) {
+          this.metrics.caloriesBurned = energyKcal;
+        }
+      }
+      offset += 5; // 2 total + 2 per hour + 1 per min
+    }
+
     // Heart Rate (bit 8)
     if (flags & (1 << 8)) {
       if (dataView.byteLength >= offset + 1) {
-        this.metrics.heartRate = dataView.getUint8(offset);
+        const hr = dataView.getUint8(offset);
+        if (hr > 30 && hr < 240) {
+          this.metrics.heartRate = hr;
+        }
       }
       offset += 1;
     }
 
-    this.addLog('RX', 'FTMS', hex, `Speed: ${this.metrics.speedKmh} km/h | Incline: ${this.metrics.inclineLevel}`);
-    if (this.onDataCallback) {
-      this.onDataCallback({ ...this.metrics });
+    // Elapsed Time (bit 10, uint16 in seconds)
+    if (flags & (1 << 10)) {
+      if (dataView.byteLength >= offset + 2) {
+        const timeSec = dataView.getUint16(offset, true);
+        if (timeSec > 0) {
+          this.metrics.elapsedSeconds = timeSec;
+        }
+      }
+      offset += 2;
+    }
+
+    // Format descriptive log
+    if (hasInstantaneousSpeed) {
+      this.addLog(
+        'RX', 
+        'FTMS', 
+        hex, 
+        `Speed: ${this.metrics.speedKmh} km/h | Incline: ${this.metrics.inclineLevel} | Dist: ${this.metrics.distanceMeters}m | Time: ${this.metrics.elapsedSeconds}s`
+      );
+      if (this.onDataCallback) {
+        this.onDataCallback({ ...this.metrics });
+      }
+    } else {
+      // Secondary packet (e.g. 01 20 00 00 00) - does not contain speed, do NOT wipe speedKmh
+      this.addLog('RX', 'FTMS', hex, `FTMS ข้อมูลเสริม (Flags: 0x${flags.toString(16)})`);
     }
   }
 

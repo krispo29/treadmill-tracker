@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Minimize2, 
   Gauge, 
@@ -12,7 +12,7 @@ import {
   VolumeX
 } from 'lucide-react';
 import type { TreadmillMetrics, UserProfile } from '../types/treadmill';
-import { formatDuration, formatPace } from '../services/calculations';
+import { formatDuration, formatPace, getSpeedPillInfo } from '../services/calculations';
 import { audioCoach } from '../services/audioCoach';
 
 interface GiantRunningHudProps {
@@ -20,6 +20,8 @@ interface GiantRunningHudProps {
   onClose: () => void;
   metrics: TreadmillMetrics;
   activeProfile: UserProfile;
+  profiles?: UserProfile[];
+  onSelectProfile?: (id: string) => void;
   onSetSpeed: (speed: number) => void;
   onSetIncline: (incline: number) => void;
   onStart: (speed?: number) => void;
@@ -32,30 +34,46 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
   onClose,
   metrics,
   activeProfile,
+  profiles = [],
+  onSelectProfile,
   onSetSpeed,
   onSetIncline,
   onStart,
   onStop,
   deviceName
 }) => {
-  const [targetSpeed, setTargetSpeed] = useState<number>(() => metrics.speedKmh > 0 ? metrics.speedKmh : 3.0);
+  const defaultStartingSpeed = activeProfile?.defaultStartSpeed ?? 3.0;
+  const [targetSpeed, setTargetSpeed] = useState<number>(() => metrics.speedKmh > 0 ? metrics.speedKmh : defaultStartingSpeed);
   const [targetIncline, setTargetIncline] = useState<number>(metrics.inclineLevel);
   const [soundOn, setSoundOn] = useState(true);
+  const lastUserActionRef = useRef<number>(0);
 
-  // Sync target with actual metrics when running
+  // When activeProfile changes and treadmill is stopped, switch target speed to their personal default
   useEffect(() => {
-    if (metrics.speedKmh > 0.5 && Math.abs(metrics.speedKmh - targetSpeed) > 0.05) {
+    if (metrics.speedKmh <= 0.1 && activeProfile?.defaultStartSpeed) {
+      setTargetSpeed(activeProfile.defaultStartSpeed);
+    }
+  }, [activeProfile?.id, activeProfile?.defaultStartSpeed]);
+
+  // Sync target with actual metrics when running (with grace period so user adjustments aren't snapped back by motor lag)
+  useEffect(() => {
+    const timeSinceLastAction = Date.now() - lastUserActionRef.current;
+    if (timeSinceLastAction > 2500 && metrics.speedKmh > 0.5 && Math.abs(metrics.speedKmh - targetSpeed) > 0.05) {
       setTargetSpeed(metrics.speedKmh);
     }
   }, [metrics.speedKmh]);
 
   useEffect(() => {
-    setTargetIncline(metrics.inclineLevel);
+    const timeSinceLastAction = Date.now() - lastUserActionRef.current;
+    if (timeSinceLastAction > 2500) {
+      setTargetIncline(metrics.inclineLevel);
+    }
   }, [metrics.inclineLevel]);
 
   if (!isOpen) return null;
 
   const handleAdjustSpeed = (delta: number) => {
+    lastUserActionRef.current = Date.now();
     if (soundOn) audioCoach.playButtonTapSound();
     const base = targetSpeed > 0.5 ? targetSpeed : (metrics.speedKmh > 0.5 ? metrics.speedKmh : 3.0);
     const newSpeed = Math.min(16.0, Math.max(1.0, Math.round((base + delta) * 10) / 10));
@@ -64,12 +82,14 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
   };
 
   const handleDirectSpeed = (spd: number) => {
+    lastUserActionRef.current = Date.now();
     if (soundOn) audioCoach.playButtonTapSound();
     setTargetSpeed(spd);
     onSetSpeed(spd);
   };
 
   const handleAdjustIncline = (delta: number) => {
+    lastUserActionRef.current = Date.now();
     if (soundOn) audioCoach.playButtonTapSound();
     const newIncline = Math.min(20, Math.max(0, Math.round(targetIncline + delta)));
     setTargetIncline(newIncline);
@@ -77,6 +97,7 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
   };
 
   const handleDirectIncline = (inc: number) => {
+    lastUserActionRef.current = Date.now();
     if (soundOn) audioCoach.playButtonTapSound();
     setTargetIncline(inc);
     onSetIncline(inc);
@@ -84,7 +105,7 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
 
   const handleStart = () => {
     if (soundOn) audioCoach.playButtonTapSound();
-    const spd = targetSpeed >= 1.0 ? targetSpeed : 3.0;
+    const spd = targetSpeed >= 1.0 ? targetSpeed : defaultStartingSpeed;
     onStart(spd);
   };
 
@@ -98,6 +119,10 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
   const distanceKm = (metrics.distanceMeters / 1000).toFixed(2);
   const caloriesStr = Math.round(metrics.caloriesBurned).toString();
 
+  const favoriteSpeeds = activeProfile?.favoriteSpeeds && activeProfile.favoriteSpeeds.length > 0
+    ? activeProfile.favoriteSpeeds
+    : [3.0, 5.0, 7.0, 9.0];
+
   const speedPresets = [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0];
   const inclinePresets = [0, 2, 4, 6, 8, 10, 12, 16, 20];
 
@@ -106,14 +131,40 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
       
       {/* Top Runner Bar */}
       <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-2 shadow-sm">
             <span className="text-xl leading-none">{activeProfile.avatar || '🏃‍♂️'}</span>
             <span className="font-bold text-sm text-white">{activeProfile.name}</span>
             <span className="text-xs text-cyan-400 font-mono">({activeProfile.weightKg}kg)</span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
+          {/* Quick Profile Switcher inside Giant HUD (Phase 2) */}
+          {profiles.length > 1 && onSelectProfile && (
+            <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+              {profiles.map((p) => {
+                const isSelected = p.id === activeProfile.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      if (soundOn) audioCoach.playButtonTapSound();
+                      onSelectProfile(p.id);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>{p.avatar}</span>
+                    <span>{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="hidden md:flex items-center gap-2 text-xs text-slate-400">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>{deviceName || 'FS-01BD59-A'}</span>
           </div>
@@ -286,6 +337,40 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
 
       {/* Bottom Mega Action Bar */}
       <div className="space-y-2 pt-2 border-t border-slate-800/80">
+        {/* Runner's Mega Personal Favorite Speed Bar (Phase 2) */}
+        {favoriteSpeeds.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5 px-1">
+              <span>⭐ สปีดโปรดของ {activeProfile.name}</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {favoriteSpeeds.map((spd) => {
+                const info = getSpeedPillInfo(spd);
+                const isSelected = Math.abs(metrics.speedKmh - spd) < 0.1;
+                return (
+                  <button
+                    key={spd}
+                    onClick={() => handleDirectSpeed(spd)}
+                    className={`py-2.5 sm:py-3 px-3 rounded-2xl border-2 flex items-center justify-between transition-all cursor-pointer active:scale-95 shadow-md ${
+                      isSelected
+                        ? 'bg-amber-500 text-slate-950 border-amber-300 ring-2 ring-amber-300/40 shadow-amber-500/25'
+                        : 'bg-slate-900/90 hover:bg-slate-850 border-amber-500/30 text-amber-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base sm:text-lg leading-none">{info.icon}</span>
+                      <span className="text-xs font-bold">{info.label}</span>
+                    </div>
+                    <span className="text-lg sm:text-xl font-black digital-number">
+                      {spd.toFixed(1)} <span className="text-[10px] font-normal opacity-80">km/h</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Speed Presets Grid */}
         <div className="grid grid-cols-8 gap-1.5 sm:gap-2">
           {speedPresets.map((spd) => {

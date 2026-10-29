@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Mountain, Gauge, Play, Square, Edit3, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Minus, Mountain, Gauge, Play, Square, Edit3, Check, Star } from 'lucide-react';
+import type { UserProfile } from '../types/treadmill';
+import { getSpeedPillInfo } from '../services/calculations';
 
 interface QuickControlsProps {
   currentSpeed: number;
@@ -8,6 +10,8 @@ interface QuickControlsProps {
   onSetIncline: (incline: number) => void;
   onStart?: (speed?: number) => void;
   onStop?: () => void;
+  activeProfile?: UserProfile;
+  onUpdateFavorites?: (speeds: number[]) => void;
 }
 
 export const QuickControls: React.FC<QuickControlsProps> = ({
@@ -16,41 +20,60 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
   onSetSpeed,
   onSetIncline,
   onStart,
-  onStop
+  onStop,
+  activeProfile,
+  onUpdateFavorites
 }) => {
+  const defaultStartingSpeed = activeProfile?.defaultStartSpeed ?? 3.0;
+
   // Internal target speed so adjustments (+0.1 / -0.1) are immediate and not affected by motor acceleration lag
-  const [targetSpeed, setTargetSpeed] = useState<number>(() => currentSpeed > 0 ? currentSpeed : 3.0);
+  const [targetSpeed, setTargetSpeed] = useState<number>(() => currentSpeed > 0 ? currentSpeed : defaultStartingSpeed);
   const [targetIncline, setTargetIncline] = useState<number>(currentIncline);
   const [isCustomSpeedOpen, setIsCustomSpeedOpen] = useState(false);
   const [customInputVal, setCustomInputVal] = useState('');
+  const lastUserActionRef = useRef<number>(0);
 
-  // Sync target with incoming actual speed if user is not actively editing
+  // When activeProfile changes and treadmill is stopped, switch target speed to their personal default
   useEffect(() => {
-    if (currentSpeed > 0.5 && Math.abs(currentSpeed - targetSpeed) > 0.05 && !isCustomSpeedOpen) {
+    if (currentSpeed <= 0.1 && activeProfile?.defaultStartSpeed) {
+      setTargetSpeed(activeProfile.defaultStartSpeed);
+    }
+  }, [activeProfile?.id, activeProfile?.defaultStartSpeed]);
+
+  // Sync target with incoming actual speed if user has not interacted recently (prevents fighting motor acceleration lag)
+  useEffect(() => {
+    const timeSinceLastAction = Date.now() - lastUserActionRef.current;
+    if (timeSinceLastAction > 2500 && currentSpeed > 0.5 && Math.abs(currentSpeed - targetSpeed) > 0.05 && !isCustomSpeedOpen) {
       setTargetSpeed(currentSpeed);
     }
   }, [currentSpeed, isCustomSpeedOpen]);
 
   useEffect(() => {
-    setTargetIncline(currentIncline);
+    const timeSinceLastAction = Date.now() - lastUserActionRef.current;
+    if (timeSinceLastAction > 2500) {
+      setTargetIncline(currentIncline);
+    }
   }, [currentIncline]);
 
   // Adjust speed with precise decimals (e.g. +0.1, -0.1, +0.5, -0.5)
   // Minimum speed when adjusting is clamped to 1.0 km/h so pressing minus NEVER drops to 0!
   const adjustSpeed = (delta: number) => {
-    const base = targetSpeed > 0.5 ? targetSpeed : (currentSpeed > 0.5 ? currentSpeed : 3.0);
+    lastUserActionRef.current = Date.now();
+    const base = targetSpeed > 0.5 ? targetSpeed : (currentSpeed > 0.5 ? currentSpeed : defaultStartingSpeed);
     const newSpeed = Math.min(16.0, Math.max(1.0, Math.round((base + delta) * 10) / 10));
     setTargetSpeed(newSpeed);
     onSetSpeed(newSpeed);
   };
 
   const setDirectSpeed = (spd: number) => {
+    lastUserActionRef.current = Date.now();
     const clamped = Math.min(16.0, Math.max(0, Math.round(spd * 10) / 10));
-    setTargetSpeed(clamped > 0 ? clamped : 3.0);
+    setTargetSpeed(clamped > 0 ? clamped : defaultStartingSpeed);
     onSetSpeed(clamped);
   };
 
   const adjustIncline = (delta: number) => {
+    lastUserActionRef.current = Date.now();
     const base = targetIncline;
     const newIncline = Math.min(20, Math.max(0, Math.round(base + delta)));
     setTargetIncline(newIncline);
@@ -61,9 +84,29 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
     e.preventDefault();
     const parsed = parseFloat(customInputVal);
     if (!isNaN(parsed) && parsed >= 0.5 && parsed <= 16.0) {
+      lastUserActionRef.current = Date.now();
       setDirectSpeed(parsed);
       setIsCustomSpeedOpen(false);
       setCustomInputVal('');
+    }
+  };
+
+  const favoriteSpeeds = activeProfile?.favoriteSpeeds && activeProfile.favoriteSpeeds.length > 0
+    ? activeProfile.favoriteSpeeds
+    : [3.0, 5.0, 7.0, 9.0];
+
+  const isCurrentSpeedFavorited = favoriteSpeeds.some(s => Math.abs(s - targetSpeed) < 0.05);
+
+  const handleToggleFavorite = () => {
+    if (!onUpdateFavorites) return;
+    if (isCurrentSpeedFavorited) {
+      // Remove current speed
+      const filtered = favoriteSpeeds.filter(s => Math.abs(s - targetSpeed) >= 0.05);
+      onUpdateFavorites(filtered.length > 0 ? filtered : [3.0]);
+    } else {
+      // Add and sort
+      const updated = [...favoriteSpeeds, targetSpeed].sort((a, b) => a - b).slice(0, 6);
+      onUpdateFavorites(updated);
     }
   };
 
@@ -85,14 +128,14 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
       <div className="grid grid-cols-2 gap-3 pt-1">
         <button
           onClick={() => {
-            const startSpd = targetSpeed >= 1.0 ? targetSpeed : 3.0;
+            const startSpd = targetSpeed >= 1.0 ? targetSpeed : defaultStartingSpeed;
             if (onStart) onStart(startSpd);
             else onSetSpeed(startSpd);
           }}
           className="py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
         >
           <Play className="w-4 h-4 fill-slate-950" />
-          <span>เริ่มเดิน (Start {targetSpeed >= 1.0 ? targetSpeed.toFixed(1) : '3.0'})</span>
+          <span>เริ่มเดิน (Start {targetSpeed >= 1.0 ? targetSpeed.toFixed(1) : defaultStartingSpeed.toFixed(1)})</span>
         </button>
 
         <button
@@ -107,6 +150,53 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
         </button>
       </div>
 
+      {/* Runner's Personal Favorite Speeds (Phase 2) */}
+      {activeProfile && (
+        <div className="p-3 rounded-2xl bg-slate-950/70 border border-amber-500/25 space-y-2.5 shadow-sm">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-amber-300 flex items-center gap-1.5">
+              <span>⭐ สปีดโปรดของ {activeProfile.name}</span>
+            </span>
+            {onUpdateFavorites && (
+              <button
+                onClick={handleToggleFavorite}
+                className="text-[11px] text-slate-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                title={isCurrentSpeedFavorited ? 'ลบความเร็วนี้ออกจากสปีดโปรด' : 'บันทึกความเร็วนี้เป็นสปีดโปรด'}
+              >
+                <Star className={`w-3.5 h-3.5 ${isCurrentSpeedFavorited ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
+                <span>{isCurrentSpeedFavorited ? 'ลบออกจากสปีดโปรด' : `+ บันทึก ${targetSpeed.toFixed(1)} เป็นสปีดโปรด`}</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {favoriteSpeeds.map((spd) => {
+              const info = getSpeedPillInfo(spd);
+              const isSelected = Math.abs(targetSpeed - spd) < 0.05;
+              return (
+                <button
+                  key={spd}
+                  onClick={() => setDirectSpeed(spd)}
+                  className={`p-2 sm:p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer active:scale-95 shadow-sm ${
+                    isSelected
+                      ? 'ring-2 ring-amber-400 bg-amber-500/20 border-amber-400 text-amber-200 shadow-amber-500/20'
+                      : info.color
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="text-base leading-none">{info.icon}</span>
+                    <span className="text-xs font-semibold truncate">{info.label}</span>
+                  </div>
+                  <span className="text-sm font-black digital-number">
+                    {spd.toFixed(1)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Speed Controls with Decimal Fine-Tuning */}
       <div className="space-y-2 pt-1">
         <div className="flex items-center justify-between text-xs">
@@ -114,52 +204,41 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
             <Gauge className="w-3.5 h-3.5" />
             <span>ปรับสปีดละเอียด (ทศนิยม 0.1 km/h)</span>
           </span>
-
           <button
-            onClick={() => {
-              setIsCustomSpeedOpen(!isCustomSpeedOpen);
-              setCustomInputVal(targetSpeed.toFixed(1));
-            }}
-            className="text-[11px] text-slate-400 hover:text-cyan-400 flex items-center gap-1 cursor-pointer"
+            onClick={() => setIsCustomSpeedOpen(!isCustomSpeedOpen)}
+            className="text-[11px] text-slate-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
           >
             <Edit3 className="w-3 h-3" />
             <span>พิมพ์ระบุตัวเลข</span>
           </button>
         </div>
 
-        {/* Custom Decimal Speed Input Modal/Bar */}
+        {/* Custom Speed Direct Input Form */}
         {isCustomSpeedOpen && (
-          <form onSubmit={handleApplyCustomSpeed} className="flex items-center gap-2 bg-slate-850 p-2 rounded-xl border border-cyan-500/30">
+          <form onSubmit={handleApplyCustomSpeed} className="flex items-center gap-2 p-2 bg-slate-950/80 rounded-xl border border-cyan-500/30">
             <input
               type="number"
               step="0.1"
               min="0.5"
               max="16.0"
+              placeholder="เช่น 4.5, 7.2"
               value={customInputVal}
               onChange={(e) => setCustomInputVal(e.target.value)}
-              placeholder="เช่น 3.2 หรือ 4.8"
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm font-mono text-cyan-300 focus:outline-none focus:border-cyan-400"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white digital-number focus:outline-none focus:border-cyan-500"
               autoFocus
             />
             <button
               type="submit"
-              className="py-1.5 px-3 rounded-lg bg-cyan-500 text-slate-950 text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95"
+              className="px-3 py-1.5 rounded-lg bg-cyan-500 text-slate-950 font-bold text-xs flex items-center gap-1 hover:bg-cyan-400 cursor-pointer active:scale-95"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>ปรับ</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsCustomSpeedOpen(false)}
-              className="py-1.5 px-2 rounded-lg bg-slate-800 text-slate-400 text-xs hover:text-white"
-            >
-              ปิด
+              <span>ใช้ความเร็วนี้</span>
             </button>
           </form>
         )}
 
-        {/* Decimal Stepper Buttons */}
-        <div className="flex items-center justify-between gap-1.5 bg-slate-850/60 p-2 rounded-xl border border-slate-800">
+        {/* Stepper Row (-0.5, -0.1, [Display], +0.1, +0.5) */}
+        <div className="flex items-center justify-between gap-1 sm:gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
           <button
             onClick={() => adjustSpeed(-0.5)}
             className="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-bold active:scale-95 cursor-pointer border border-slate-700/60"

@@ -48,10 +48,81 @@ import { DiagnosticDrawer } from './components/DiagnosticDrawer';
 import { GiantRunningHud } from './components/GiantRunningHud';
 
 const DEFAULT_PROFILES: UserProfile[] = [
-  { id: 'p_runner1', name: 'Mike', avatar: '🏃‍♂️', weightKg: 70, heightCm: 175, age: 28, gender: 'male' },
-  { id: 'p_runner2', name: 'Joy', avatar: '🏃‍♀️', weightKg: 54, heightCm: 162, age: 26, gender: 'female' },
-  { id: 'p_runner3', name: 'Dad', avatar: '🦁', weightKg: 75, heightCm: 170, age: 58, gender: 'male' },
+  { 
+    id: 'p_runner1', 
+    name: 'Mike', 
+    avatar: '🏃‍♂️', 
+    weightKg: 70, 
+    heightCm: 175, 
+    age: 28, 
+    gender: 'male',
+    defaultStartSpeed: 3.5,
+    favoriteSpeeds: [3.5, 6.5, 8.5, 10.5],
+    favoriteInclines: [0, 2, 4, 8],
+  },
+  { 
+    id: 'p_runner2', 
+    name: 'Joy', 
+    avatar: '🏃‍♀️', 
+    weightKg: 54, 
+    heightCm: 162, 
+    age: 26, 
+    gender: 'female',
+    defaultStartSpeed: 3.0,
+    favoriteSpeeds: [3.0, 4.5, 5.5, 7.0],
+    favoriteInclines: [0, 2, 5, 12],
+  },
+  { 
+    id: 'p_runner3', 
+    name: 'Dad', 
+    avatar: '🦁', 
+    weightKg: 75, 
+    heightCm: 170, 
+    age: 58, 
+    gender: 'male',
+    defaultStartSpeed: 2.5,
+    favoriteSpeeds: [2.5, 3.2, 4.0, 4.8],
+    favoriteInclines: [0, 1, 3, 5],
+  },
 ];
+
+// Helper to ensure saved profiles have favorite speeds migrated
+const ensureProfileFavorites = (p: UserProfile): UserProfile => {
+  if (p.favoriteSpeeds && p.favoriteSpeeds.length > 0 && p.defaultStartSpeed) {
+    return p;
+  }
+  const nameLower = p.name.toLowerCase();
+  if (nameLower === 'mike') {
+    return {
+      ...p,
+      defaultStartSpeed: p.defaultStartSpeed ?? 3.5,
+      favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [3.5, 6.5, 8.5, 10.5],
+      favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 2, 4, 8],
+    };
+  }
+  if (nameLower === 'joy') {
+    return {
+      ...p,
+      defaultStartSpeed: p.defaultStartSpeed ?? 3.0,
+      favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [3.0, 4.5, 5.5, 7.0],
+      favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 2, 5, 12],
+    };
+  }
+  if (nameLower === 'dad' || p.name.includes('พ่อ')) {
+    return {
+      ...p,
+      defaultStartSpeed: p.defaultStartSpeed ?? 2.5,
+      favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [2.5, 3.2, 4.0, 4.8],
+      favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 1, 3, 5],
+    };
+  }
+  return {
+    ...p,
+    defaultStartSpeed: p.defaultStartSpeed ?? 3.0,
+    favoriteSpeeds: p.favoriteSpeeds?.length ? p.favoriteSpeeds : [3.0, 5.0, 7.0, 9.0],
+    favoriteInclines: p.favoriteInclines?.length ? p.favoriteInclines : [0, 2, 4, 6],
+  };
+};
 
 export const App: React.FC = () => {
   const [metrics, setMetrics] = useState<TreadmillMetrics>({
@@ -94,7 +165,12 @@ export const App: React.FC = () => {
   const [profiles, setProfiles] = useState<UserProfile[]>(() => {
     const saved = localStorage.getItem('treadmill_multi_profiles');
     if (saved) {
-      try { return JSON.parse(saved); } catch {}
+      try {
+        const parsed: UserProfile[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(ensureProfileFavorites);
+        }
+      } catch {}
     }
     return DEFAULT_PROFILES;
   });
@@ -280,6 +356,19 @@ export const App: React.FC = () => {
   const handleSelectProfile = (id: string) => {
     setActiveProfileId(id);
     localStorage.setItem('treadmill_active_profile_id', id);
+    const chosen = profiles.find(p => p.id === id);
+    if (chosen) {
+      bluetoothService.setUserWeight(chosen.weightKg);
+      setSaveSuccessMsg(`🏃 สลับคนวิ่งเป็น ${chosen.name} (${chosen.weightKg}kg) — สปีดโปรด: ${chosen.favoriteSpeeds?.join(', ') || '3, 5, 7, 9'} km/h`);
+      setTimeout(() => setSaveSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleUpdateActiveFavorites = (newFavorites: number[]) => {
+    const updatedProfile = { ...activeProfile, favoriteSpeeds: newFavorites };
+    handleSaveProfile(updatedProfile);
+    setSaveSuccessMsg(`⭐ บันทึกสปีดโปรดของ ${activeProfile.name} แล้ว (${newFavorites.map(s => s.toFixed(1)).join(', ')} km/h)`);
+    setTimeout(() => setSaveSuccessMsg(null), 3500);
   };
 
   const handleSaveProfile = (p: UserProfile) => {
@@ -535,6 +624,52 @@ export const App: React.FC = () => {
           </div>
         </div>
 
+        {/* Household Multi-Profile Quick Switcher (Phase 2) */}
+        <div className="rounded-2xl bg-slate-900/70 border border-slate-800 p-3 sm:p-4 text-xs space-y-2 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-slate-300 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-cyan-400" />
+              <span>👥 สลับคนวิ่งในบ้าน (Household Runners):</span>
+            </span>
+            <button
+              onClick={() => setIsProfileModalOpen(true)}
+              className="text-xs text-cyan-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <span>⚙️ จัดการโปรไฟล์ / สปีดโปรด</span>
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            {profiles.map((p) => {
+              const isSelected = p.id === activeProfile.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => handleSelectProfile(p.id)}
+                  className={`px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 transition-all cursor-pointer border active:scale-95 shadow-sm ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-cyan-500 to-emerald-400 text-slate-950 border-cyan-300 shadow-md shadow-cyan-500/20'
+                      : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="text-base leading-none">{p.avatar || '🏃‍♂️'}</span>
+                  <span className="text-sm">{p.name}</span>
+                  <span className={`text-[11px] font-mono ${isSelected ? 'text-slate-900 font-bold' : 'text-slate-500'}`}>
+                    ({p.weightKg}kg)
+                  </span>
+                  {p.favoriteSpeeds && p.favoriteSpeeds.length > 0 && (
+                    <span className={`text-[10px] font-mono hidden md:inline ml-1 px-1.5 py-0.5 rounded ${
+                      isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-amber-300'
+                    }`}>
+                      ⭐ {p.favoriteSpeeds.slice(0, 3).map(s => s.toFixed(1)).join('/')}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Save Confirmation Notification Banner */}
         {saveSuccessMsg && (
           <div className="rounded-xl p-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-2 animate-fade-in">
@@ -564,7 +699,7 @@ export const App: React.FC = () => {
           <InclineVisualizer inclineLevel={metrics.inclineLevel} />
         </div>
 
-        {/* Quick Touch Controls for iPad */}
+        {/* Quick Touch Controls for iPad with Personal Favorite Speeds (Phase 2) */}
         <QuickControls
           currentSpeed={metrics.speedKmh}
           currentIncline={metrics.inclineLevel}
@@ -572,6 +707,8 @@ export const App: React.FC = () => {
           onSetIncline={handleSetIncline}
           onStart={handleStartTreadmill}
           onStop={handleStopTreadmill}
+          activeProfile={activeProfile}
+          onUpdateFavorites={handleUpdateActiveFavorites}
         />
 
         {/* Live Workout Telemetry Chart (Speed Area & Incline Line) */}
@@ -640,43 +777,6 @@ export const App: React.FC = () => {
           inclineLevel={metrics.inclineLevel}
         />
 
-        {/* Quick Multi-Profile Switcher Banner */}
-        <div className="rounded-2xl bg-slate-900/40 border border-slate-800/80 p-4 text-xs text-slate-400 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-cyan-400" />
-              <span>สลับคนวิ่งอย่างรวดเร็ว (Multi-Profile):</span>
-            </span>
-            <button
-              onClick={() => setIsProfileModalOpen(true)}
-              className="text-xs text-cyan-400 font-bold hover:underline cursor-pointer"
-            >
-              + เพิ่มคนใหม่ / แก้ไข
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            {profiles.map((p) => {
-              const isSelected = p.id === activeProfile.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => handleSelectProfile(p.id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                    isSelected
-                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
-                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
-                  }`}
-                >
-                  <span>{p.avatar || '🏃‍♂️'}</span>
-                  <span>{p.name}</span>
-                  <span className="text-[10px] opacity-75">({p.weightKg}kg)</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
       </main>
 
       {/* Live Raw Hex Packet Diagnostic Drawer */}
@@ -739,12 +839,14 @@ export const App: React.FC = () => {
         </button>
       )}
 
-      {/* Giant Running HUD Fullscreen Cockpit */}
+      {/* Giant Running HUD Fullscreen Cockpit with Household Switcher & Favorites (Phase 2) */}
       <GiantRunningHud
         isOpen={isGiantHudOpen}
         onClose={() => setIsGiantHudOpen(false)}
         metrics={metrics}
         activeProfile={activeProfile}
+        profiles={profiles}
+        onSelectProfile={handleSelectProfile}
         onSetSpeed={handleSetSpeed}
         onSetIncline={handleSetIncline}
         onStart={handleStartTreadmill}
