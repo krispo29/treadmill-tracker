@@ -10,24 +10,29 @@ import {
   MapPin, 
   Timer, 
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Users
 } from 'lucide-react';
 import type { WorkoutRecord, DatabaseStats } from '../types/database';
+import type { UserProfile } from '../types/treadmill';
 import { neonDatabase } from '../services/neonDatabase';
 import { formatDuration } from '../services/calculations';
 
 interface HistoryAnalyticsModalProps {
   isOpen: boolean;
+  profiles: UserProfile[];
   onClose: () => void;
   onOpenNeonSettings: () => void;
 }
 
 export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
   isOpen,
+  profiles,
   onClose,
   onOpenNeonSettings
 }) => {
   const [workouts, setWorkouts] = useState<WorkoutRecord[]>([]);
+  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const isNeonConnected = neonDatabase.isConfigured();
 
@@ -46,7 +51,12 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const stats: DatabaseStats = neonDatabase.calculateStats(workouts);
+  // Filter workouts by selected user
+  const filteredWorkouts = selectedUserFilter === 'all'
+    ? workouts
+    : workouts.filter(w => (w.user_name || '').toLowerCase() === selectedUserFilter.toLowerCase() || w.user_id === selectedUserFilter);
+
+  const stats: DatabaseStats = neonDatabase.calculateStats(filteredWorkouts);
 
   const handleDelete = async (id: string) => {
     if (window.confirm('คุณต้องการลบประวัติการวิ่งนี้ใช่หรือไม่?')) {
@@ -61,7 +71,7 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `treadmill-${new Date(workout.created_at).toISOString().split('T')[0]}.gpx`;
+    a.download = `treadmill-${(workout.user_name || 'run').toLowerCase()}-${new Date(workout.created_at).toISOString().split('T')[0]}.gpx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -69,13 +79,13 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
   };
 
   const handleDownloadCsv = () => {
-    if (workouts.length === 0) return;
-    const csvText = neonDatabase.generateCsv(workouts);
+    if (filteredWorkouts.length === 0) return;
+    const csvText = neonDatabase.generateCsv(filteredWorkouts);
     const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `treadmill-history-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `treadmill-history-${selectedUserFilter}-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -140,8 +150,48 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
           </div>
         </div>
 
+        {/* Multi-Profile Filter Tabs */}
+        <div className="flex items-center gap-1.5 my-3 overflow-x-auto pb-1 shrink-0 text-xs">
+          <span className="text-slate-500 font-semibold mr-1 flex items-center gap-1">
+            <Users className="w-3.5 h-3.5" />
+            <span>กรองตามคนวิ่ง:</span>
+          </span>
+
+          <button
+            onClick={() => setSelectedUserFilter('all')}
+            className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer border ${
+              selectedUserFilter === 'all'
+                ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
+                : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            ทุกคนรวมกัน ({workouts.length})
+          </button>
+
+          {profiles.map((p) => {
+            const count = workouts.filter(w => (w.user_name || '').toLowerCase() === p.name.toLowerCase() || w.user_id === p.id).length;
+            const isSelected = selectedUserFilter.toLowerCase() === p.name.toLowerCase() || selectedUserFilter === p.id;
+
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedUserFilter(p.name)}
+                className={`px-3 py-1 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                  isSelected
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
+                    : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                }`}
+              >
+                <span>{p.avatar || '🏃‍♂️'}</span>
+                <span>{p.name}</span>
+                <span className="opacity-70 text-[10px]">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Aggregate Stats Summary Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 my-4 shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3 shrink-0">
           <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
             <span className="text-[10px] uppercase font-bold text-slate-500 block">จำนวนครั้ง</span>
             <div className="text-xl sm:text-2xl font-black digital-number text-white mt-0.5">
@@ -180,25 +230,31 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
 
         {/* Workouts History List */}
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-          {workouts.length === 0 ? (
+          {filteredWorkouts.length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-xs">
               <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-              <span>ยังไม่มีประวัติการวิ่ง (เมื่อวิ่งเสร็จและกดบันทึก ข้อมูลจะขึ้นที่นี่)</span>
+              <span>ยังไม่มีประวัติการวิ่ง{selectedUserFilter !== 'all' ? ` ของ ${selectedUserFilter}` : ''}</span>
             </div>
           ) : (
-            workouts.map((w) => (
+            filteredWorkouts.map((w) => (
               <div
                 key={w.id}
                 className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
               >
-                {/* Left: Program & Date */}
+                {/* Left: Runner Badge + Program & Date */}
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Runner Avatar Badge */}
+                    <span className="px-2 py-0.5 rounded-md font-bold text-xs bg-slate-800 text-slate-200 border border-slate-700 flex items-center gap-1">
+                      <span>{w.user_avatar || '🏃‍♂️'}</span>
+                      <span>{w.user_name || 'User'}</span>
+                    </span>
+
                     <span className="font-bold text-white text-sm">
                       {w.program_name || 'Free Run'}
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      {new Date(w.created_at).toLocaleDateString('th-TH', {
+                      • {new Date(w.created_at).toLocaleDateString('th-TH', {
                         day: 'numeric',
                         month: 'short',
                         year: 'numeric',
@@ -229,6 +285,11 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
                     <span className="text-amber-400 font-mono">
                       🔥 ไขมัน {w.fat_grams_burned.toFixed(1)}g
                     </span>
+                    {w.user_weight_kg && (
+                      <span className="text-slate-500 font-mono">
+                        (นน. {w.user_weight_kg}kg | BMI {w.user_bmi})
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -256,18 +317,18 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
           )}
         </div>
 
-        {/* Footer: Export All to CSV */}
-        {workouts.length > 0 && (
+        {/* Footer: Export Filtered CSV */}
+        {filteredWorkouts.length > 0 && (
           <div className="pt-3 border-t border-slate-800 flex justify-between items-center shrink-0">
             <span className="text-xs text-slate-500">
-              ข้อมูลทั้งหมดเก็บไว้บน Neon Cloud อย่างปลอดภัย
+              {selectedUserFilter === 'all' ? 'ข้อมูลทั้งหมดเก็บไว้บน Neon Cloud' : `แสดงเฉพาะสถิติของ ${selectedUserFilter}`}
             </span>
             <button
               onClick={handleDownloadCsv}
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>ส่งออกทั้งหมดเป็น CSV (Excel)</span>
+              <span>ส่งออก CSV (Excel)</span>
             </button>
           </div>
         )}

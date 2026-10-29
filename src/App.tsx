@@ -6,10 +6,10 @@ import {
   Mountain, 
   Maximize2, 
   Columns, 
-  Sparkles,
   Tablet,
   Save,
-  Check
+  Check,
+  Users
 } from 'lucide-react';
 import type { 
   BluetoothProtocol, 
@@ -40,8 +40,14 @@ import { WorkoutActiveBanner } from './components/WorkoutActiveBanner';
 import { WorkoutProgramsModal } from './components/WorkoutProgramsModal';
 import { HistoryAnalyticsModal } from './components/HistoryAnalyticsModal';
 import { NeonSettingsModal } from './components/NeonSettingsModal';
-import { UserProfileModal } from './components/UserProfileModal';
+import { ProfileManagerModal } from './components/ProfileManagerModal';
 import { DiagnosticDrawer } from './components/DiagnosticDrawer';
+
+const DEFAULT_PROFILES: UserProfile[] = [
+  { id: 'p_runner1', name: 'Mike', avatar: '🏃‍♂️', weightKg: 70, heightCm: 175, age: 28, gender: 'male' },
+  { id: 'p_runner2', name: 'Joy', avatar: '🏃‍♀️', weightKg: 54, heightCm: 162, age: 26, gender: 'female' },
+  { id: 'p_runner3', name: 'Dad', avatar: '🦁', weightKg: 75, heightCm: 170, age: 58, gender: 'male' },
+];
 
 export const App: React.FC = () => {
   const [metrics, setMetrics] = useState<TreadmillMetrics>({
@@ -74,27 +80,28 @@ export const App: React.FC = () => {
   const maxSpeedRef = useRef<number>(0);
   const maxInclineRef = useRef<number>(0);
 
+  // Multi-Profile Management (No login required)
+  const [profiles, setProfiles] = useState<UserProfile[]>(() => {
+    const saved = localStorage.getItem('treadmill_multi_profiles');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return DEFAULT_PROFILES;
+  });
+
+  const [activeProfileId, setActiveProfileId] = useState<string>(() => {
+    const savedId = localStorage.getItem('treadmill_active_profile_id');
+    return savedId || 'p_runner1';
+  });
+
+  const activeProfile: UserProfile = profiles.find(p => p.id === activeProfileId) || profiles[0] || DEFAULT_PROFILES[0];
+
   // Active workout goal stored in localStorage
   const [goal, setGoal] = useState<WorkoutGoal>(() => {
     const saved = localStorage.getItem('treadmill_workout_goal');
     return saved
       ? JSON.parse(saved)
       : { type: 'distance', target: 5.0, title: 'วิ่งระยะทาง 5.0 km' };
-  });
-
-  // User Profile (Weight, Height, Age, Gender) stored in localStorage
-  const [profile, setProfile] = useState<UserProfile>(() => {
-    const saved = localStorage.getItem('treadmill_user_profile');
-    if (saved) {
-      try { return JSON.parse(saved); } catch {}
-    }
-    const legacyWeight = localStorage.getItem('treadmill_user_weight');
-    return {
-      weightKg: legacyWeight ? parseFloat(legacyWeight) : 70,
-      heightCm: 175,
-      age: 28,
-      gender: 'male',
-    };
   });
 
   // Workout Execution Engine State
@@ -113,9 +120,10 @@ export const App: React.FC = () => {
   const workoutStateRef = useRef(workoutState);
   workoutStateRef.current = workoutState;
 
+  // Sync weight whenever active profile changes
   useEffect(() => {
-    bluetoothService.setUserWeight(profile.weightKg);
-  }, [profile.weightKg]);
+    bluetoothService.setUserWeight(activeProfile.weightKg);
+  }, [activeProfile.weightKg]);
 
   useEffect(() => {
     audioCoach.setPreferences(
@@ -175,7 +183,6 @@ export const App: React.FC = () => {
       if (newStepElapsed >= currentStep.durationSeconds) {
         const nextIndex = state.currentStepIndex + 1;
         if (nextIndex < state.program.steps.length) {
-          // Move to next step
           const nextStep = state.program.steps[nextIndex];
           audioCoach.playIntervalChangeBeep();
           audioCoach.announceInterval(nextStep.name, nextStep.targetSpeed, nextStep.targetIncline);
@@ -249,10 +256,32 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSaveProfile = (newProfile: UserProfile) => {
-    setProfile(newProfile);
-    localStorage.setItem('treadmill_user_profile', JSON.stringify(newProfile));
-    localStorage.setItem('treadmill_user_weight', newProfile.weightKg.toString());
+  // Profile actions
+  const handleSelectProfile = (id: string) => {
+    setActiveProfileId(id);
+    localStorage.setItem('treadmill_active_profile_id', id);
+  };
+
+  const handleSaveProfile = (p: UserProfile) => {
+    const existingIndex = profiles.findIndex(item => item.id === p.id);
+    let updated: UserProfile[];
+    if (existingIndex >= 0) {
+      updated = [...profiles];
+      updated[existingIndex] = p;
+    } else {
+      updated = [...profiles, p];
+    }
+    setProfiles(updated);
+    localStorage.setItem('treadmill_multi_profiles', JSON.stringify(updated));
+  };
+
+  const handleDeleteProfile = (id: string) => {
+    const updated = profiles.filter(p => p.id !== id);
+    setProfiles(updated);
+    localStorage.setItem('treadmill_multi_profiles', JSON.stringify(updated));
+    if (activeProfileId === id && updated.length > 0) {
+      handleSelectProfile(updated[0].id);
+    }
   };
 
   const handleSaveGoal = (newGoal: WorkoutGoal) => {
@@ -321,7 +350,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Save Workout to Neon Postgres including user demographics (Weight, Height, Age, BMI)
+  // Save Workout to Neon Postgres tagged with active runner's profile
   const handleManualSaveWorkout = async () => {
     if (metrics.elapsedSeconds < 10) {
       alert('เวลาในการวิ่งสั้นเกินไป (ต้องมากกว่า 10 วินาที)');
@@ -333,8 +362,8 @@ export const App: React.FC = () => {
       ? (metrics.distanceMeters / 1000) / (metrics.elapsedSeconds / 3600)
       : metrics.speedKmh;
 
-    const heightM = profile.heightCm / 100;
-    const userBmi = heightM > 0 ? Number((profile.weightKg / (heightM * heightM)).toFixed(1)) : undefined;
+    const heightM = activeProfile.heightCm / 100;
+    const userBmi = heightM > 0 ? Number((activeProfile.weightKg / (heightM * heightM)).toFixed(1)) : undefined;
 
     const record: WorkoutRecord = {
       id: `wo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -349,10 +378,13 @@ export const App: React.FC = () => {
       avg_incline: metrics.inclineLevel,
       max_incline: Math.max(metrics.inclineLevel, maxInclineRef.current),
       fat_grams_burned: Number(metrics.fatGramsBurned.toFixed(1)),
-      user_weight_kg: profile.weightKg,
-      user_height_cm: profile.heightCm,
-      user_age: profile.age,
-      user_gender: profile.gender,
+      user_id: activeProfile.id,
+      user_name: activeProfile.name,
+      user_avatar: activeProfile.avatar,
+      user_weight_kg: activeProfile.weightKg,
+      user_height_cm: activeProfile.heightCm,
+      user_age: activeProfile.age,
+      user_gender: activeProfile.gender,
       user_bmi: userBmi,
     };
 
@@ -365,8 +397,8 @@ export const App: React.FC = () => {
   const handleAutoSaveWorkout = async () => {
     if (metrics.elapsedSeconds >= 10) {
       const avgSpeed = (metrics.distanceMeters / 1000) / (metrics.elapsedSeconds / 3600);
-      const heightM = profile.heightCm / 100;
-      const userBmi = heightM > 0 ? Number((profile.weightKg / (heightM * heightM)).toFixed(1)) : undefined;
+      const heightM = activeProfile.heightCm / 100;
+      const userBmi = heightM > 0 ? Number((activeProfile.weightKg / (heightM * heightM)).toFixed(1)) : undefined;
 
       const record: WorkoutRecord = {
         id: `wo_${Date.now()}`,
@@ -381,17 +413,19 @@ export const App: React.FC = () => {
         avg_incline: metrics.inclineLevel,
         max_incline: Math.max(metrics.inclineLevel, maxInclineRef.current),
         fat_grams_burned: Number(metrics.fatGramsBurned.toFixed(1)),
-        user_weight_kg: profile.weightKg,
-        user_height_cm: profile.heightCm,
-        user_age: profile.age,
-        user_gender: profile.gender,
+        user_id: activeProfile.id,
+        user_name: activeProfile.name,
+        user_avatar: activeProfile.avatar,
+        user_weight_kg: activeProfile.weightKg,
+        user_height_cm: activeProfile.heightCm,
+        user_age: activeProfile.age,
+        user_gender: activeProfile.gender,
         user_bmi: userBmi,
       };
       await neonDatabase.saveWorkout(record);
     }
   };
 
-  // Distance in kilometers
   const distanceKm = (metrics.distanceMeters / 1000).toFixed(2);
   const durationStr = formatDuration(metrics.elapsedSeconds);
   const caloriesStr = Math.round(metrics.caloriesBurned).toString();
@@ -404,10 +438,11 @@ export const App: React.FC = () => {
         protocol={protocol}
         deviceName={deviceName}
         isSimulating={isSimulating}
+        activeProfile={activeProfile}
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
         onToggleSimulation={handleToggleSimulation}
-        onOpenSettings={() => setIsProfileModalOpen(true)}
+        onOpenProfileManager={() => setIsProfileModalOpen(true)}
         onOpenWorkouts={() => setIsWorkoutsModalOpen(true)}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
         onResetSession={handleResetSession}
@@ -438,11 +473,20 @@ export const App: React.FC = () => {
         {/* iPad Split-View Toggle & Quick Status Banner */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 bg-slate-900/60 rounded-xl px-4 py-2.5 border border-slate-800">
           <div className="flex items-center gap-2">
-            <Tablet className="w-4 h-4 text-cyan-400" />
-            <span>โหมดหน้าจอ iPad:</span>
-            <span className="text-slate-200 font-medium">
-              {compactMode ? 'โหมดคอลัมน์กระชับ (Split View)' : 'โหมดเต็มหน้าจอ (Full Dashboard)'}
-            </span>
+            <button
+              onClick={() => setIsProfileModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors font-bold cursor-pointer"
+            >
+              <span>{activeProfile.avatar || '🏃‍♂️'}</span>
+              <span>กำลังวิ่ง: {activeProfile.name}</span>
+            </button>
+            <span className="hidden sm:inline text-slate-500">|</span>
+            <div className="hidden sm:flex items-center gap-1.5">
+              <Tablet className="w-4 h-4 text-slate-400" />
+              <span className="text-slate-300 font-medium">
+                {compactMode ? 'Split View' : 'Full Dashboard'}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -451,10 +495,10 @@ export const App: React.FC = () => {
               onClick={handleManualSaveWorkout}
               disabled={isSaving || metrics.elapsedSeconds < 5}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all font-semibold cursor-pointer active:scale-95 disabled:opacity-40"
-              title="บันทึกเซสชั่นนี้พร้อมค่าน้ำหนัก ส่วนสูง อายุ และ BMI ขึ้น Neon Database"
+              title={`บันทึกผลการวิ่งของ ${activeProfile.name} ขึ้น Neon Database`}
             >
               <Save className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{isSaving ? 'กำลังบันทึก...' : 'บันทึกเซสชั่น (Save to Neon)'}</span>
+              <span>{isSaving ? 'กำลังบันทึก...' : `บันทึกเซสชั่นของ ${activeProfile.name}`}</span>
             </button>
 
             <button
@@ -547,7 +591,7 @@ export const App: React.FC = () => {
             title="แคลอรี่จริง (ACSM Incline)"
             value={caloriesStr}
             unit="KCAL"
-            subtitle={`คำนวณตามความชันจริง (นน. ${profile.weightKg} kg, สูง ${profile.heightCm} cm)`}
+            subtitle={`คำนวณตาม นน. ${activeProfile.weightKg} kg ของ ${activeProfile.name}`}
             icon={<Flame className="w-5 h-5" />}
             colorScheme="orange"
             highlight={metrics.inclineLevel >= 10}
@@ -570,18 +614,41 @@ export const App: React.FC = () => {
           inclineLevel={metrics.inclineLevel}
         />
 
-        {/* Quick Instructions & Tips */}
+        {/* Quick Multi-Profile Switcher Banner */}
         <div className="rounded-2xl bg-slate-900/40 border border-slate-800/80 p-4 text-xs text-slate-400 space-y-2">
-          <div className="flex items-center gap-2 text-slate-300 font-semibold">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>คำแนะนำการใช้งานและวิเคราะห์ข้อมูล:</span>
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-cyan-400" />
+              <span>สลับคนวิ่งอย่างรวดเร็ว (Multi-Profile):</span>
+            </span>
+            <button
+              onClick={() => setIsProfileModalOpen(true)}
+              className="text-xs text-cyan-400 font-bold hover:underline cursor-pointer"
+            >
+              + เพิ่มคนใหม่ / แก้ไข
+            </button>
           </div>
-          <p>
-            1. <strong>โปรไฟล์สุขภาพ (ปุ่มรูปฟันเฟือง):</strong> กำหนดค่าน้ำหนัก ส่วนสูง อายุ เพื่อคำนวณ <code>BMI</code>, <code>Max Heart Rate</code>, <code>Zone 2 Target HR</code> และ <code>BMR</code>
-          </p>
-          <p>
-            2. <strong>บันทึกขึ้น Neon:</strong> ทุกครั้งที่กดบันทึก ข้อมูลร่างกาย ณ ขณะนั้นจะถูกบันทึกคู่กับระยะทางและแคลอรี่ เพื่อดูแนวโน้มการลดน้ำหนักในอนาคตได้
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {profiles.map((p) => {
+              const isSelected = p.id === activeProfile.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => handleSelectProfile(p.id)}
+                  className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    isSelected
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
+                  }`}
+                >
+                  <span>{p.avatar || '🏃‍♂️'}</span>
+                  <span>{p.name}</span>
+                  <span className="text-[10px] opacity-75">({p.weightKg}kg)</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
       </main>
@@ -592,11 +659,14 @@ export const App: React.FC = () => {
         onClearLogs={() => setLogs([])}
       />
 
-      {/* User Body Profile Settings Modal (Weight, Height, Age, Gender, BMI) */}
-      <UserProfileModal
+      {/* Multi-Profile Manager Modal */}
+      <ProfileManagerModal
         isOpen={isProfileModalOpen}
-        profile={profile}
-        onSave={handleSaveProfile}
+        profiles={profiles}
+        activeProfileId={activeProfile.id}
+        onSelectProfile={handleSelectProfile}
+        onSaveProfile={handleSaveProfile}
+        onDeleteProfile={handleDeleteProfile}
         onClose={() => setIsProfileModalOpen(false)}
       />
 
@@ -617,9 +687,10 @@ export const App: React.FC = () => {
         onChangeLanguage={(lang) => setWorkoutState((p) => ({ ...p, language: lang }))}
       />
 
-      {/* History & Analytics Modal */}
+      {/* History & Analytics Modal with Runner Filters */}
       <HistoryAnalyticsModal
         isOpen={isHistoryModalOpen}
+        profiles={profiles}
         onClose={() => setIsHistoryModalOpen(false)}
         onOpenNeonSettings={() => setIsNeonModalOpen(true)}
       />

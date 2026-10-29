@@ -1,16 +1,17 @@
 import React from 'react';
-import { Bluetooth, BluetoothOff, Settings, Monitor, Dumbbell, History } from 'lucide-react';
-import type { BluetoothProtocol, ConnectionStatus } from '../types/treadmill';
+import { Bluetooth, BluetoothOff, Monitor, Dumbbell, History, ChevronDown } from 'lucide-react';
+import type { BluetoothProtocol, ConnectionStatus, UserProfile } from '../types/treadmill';
 
 interface HeaderProps {
   status: ConnectionStatus;
   protocol: BluetoothProtocol;
   deviceName: string;
   isSimulating: boolean;
+  activeProfile: UserProfile;
   onConnect: () => void;
   onDisconnect: () => void;
   onToggleSimulation: () => void;
-  onOpenSettings: () => void;
+  onOpenProfileManager: () => void;
   onOpenWorkouts: () => void;
   onOpenHistory: () => void;
   onResetSession: () => void;
@@ -21,10 +22,11 @@ export const Header: React.FC<HeaderProps> = ({
   protocol,
   deviceName,
   isSimulating,
+  activeProfile,
   onConnect,
   onDisconnect,
   onToggleSimulation,
-  onOpenSettings,
+  onOpenProfileManager,
   onOpenWorkouts,
   onOpenHistory,
   onResetSession
@@ -43,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
                 Treadmill <span className="text-cyan-400">Tracker</span>
               </h1>
               <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                Phase 4 Neon
+                Pro
               </span>
             </div>
             
@@ -85,6 +87,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Active Runner 1-Tap Switcher Pill */}
+          <button
+            onClick={onOpenProfileManager}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 bg-slate-800 hover:bg-slate-750 text-white border border-slate-700 transition-all cursor-pointer shadow-sm active:scale-95"
+            title="แตะเพื่อสลับคนวิ่ง หรือเพิ่มคนใหม่"
+          >
+            <span className="text-base leading-none">{activeProfile.avatar || '🏃‍♂️'}</span>
+            <span className="truncate max-w-[100px]">{activeProfile.name}</span>
+            <span className="text-[10px] text-cyan-400 font-mono">({activeProfile.weightKg}kg)</span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+
           {/* Workout Programs Button */}
           <button
             onClick={onOpenWorkouts}
@@ -125,15 +139,6 @@ export const Header: React.FC<HeaderProps> = ({
             title="รีเซ็ตสถิติรอบนี้"
           >
             รีเซ็ต
-          </button>
-
-          {/* Settings button */}
-          <button
-            onClick={onOpenSettings}
-            className="p-2 rounded-lg text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 transition-colors cursor-pointer"
-            title="ตั้งค่าน้ำหนักตัวสำหรับแคลอรี่"
-          >
-            <Settings className="w-4 h-4" />
           </button>
 
           {/* Bluetooth Connect/Disconnect Button */}

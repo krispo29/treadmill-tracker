@@ -78,6 +78,9 @@ class NeonDatabaseService {
         avg_incline NUMERIC NOT NULL,
         max_incline INTEGER NOT NULL,
         fat_grams_burned NUMERIC NOT NULL,
+        user_id TEXT,
+        user_name TEXT,
+        user_avatar TEXT,
         user_weight_kg NUMERIC,
         user_height_cm NUMERIC,
         user_age INTEGER,
@@ -88,6 +91,9 @@ class NeonDatabaseService {
     `;
 
     // Safe migrations for existing tables
+    await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_id TEXT;`;
+    await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_name TEXT;`;
+    await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_avatar TEXT;`;
     await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_weight_kg NUMERIC;`;
     await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_height_cm NUMERIC;`;
     await sql`ALTER TABLE treadmill_workouts ADD COLUMN IF NOT EXISTS user_age INTEGER;`;
@@ -99,10 +105,8 @@ class NeonDatabaseService {
    * Saves a workout record (to Neon if configured, always backs up locally)
    */
   public async saveWorkout(workout: WorkoutRecord): Promise<{ success: boolean; mode: 'neon' | 'local'; message: string }> {
-    // 1. Always back up to local storage first
     this.saveToLocal(workout);
 
-    // 2. Try saving to Neon if configured
     if (this.isConfigured()) {
       try {
         const sql = this.getClient();
@@ -113,12 +117,14 @@ class NeonDatabaseService {
             id, created_at, program_name, duration_seconds, distance_meters,
             calories_burned, elevation_gain_meters, avg_speed_kmh, max_speed_kmh,
             avg_incline, max_incline, fat_grams_burned,
+            user_id, user_name, user_avatar,
             user_weight_kg, user_height_cm, user_age, user_gender, user_bmi, notes
           ) VALUES (
             ${workout.id}, ${workout.created_at}, ${workout.program_name},
             ${workout.duration_seconds}, ${workout.distance_meters}, ${workout.calories_burned},
             ${workout.elevation_gain_meters}, ${workout.avg_speed_kmh}, ${workout.max_speed_kmh},
             ${workout.avg_incline}, ${workout.max_incline}, ${workout.fat_grams_burned},
+            ${workout.user_id || null}, ${workout.user_name || null}, ${workout.user_avatar || null},
             ${workout.user_weight_kg || null}, ${workout.user_height_cm || null},
             ${workout.user_age || null}, ${workout.user_gender || null},
             ${workout.user_bmi || null}, ${workout.notes || ''}
@@ -129,13 +135,16 @@ class NeonDatabaseService {
             distance_meters = EXCLUDED.distance_meters,
             calories_burned = EXCLUDED.calories_burned,
             elevation_gain_meters = EXCLUDED.elevation_gain_meters,
+            user_id = EXCLUDED.user_id,
+            user_name = EXCLUDED.user_name,
+            user_avatar = EXCLUDED.user_avatar,
             user_weight_kg = EXCLUDED.user_weight_kg,
             user_height_cm = EXCLUDED.user_height_cm,
             user_age = EXCLUDED.user_age,
             user_bmi = EXCLUDED.user_bmi;
         `;
 
-        return { success: true, mode: 'neon', message: 'บันทึกข้อมูลและโปรไฟล์ร่างกายขึ้น Neon Cloud เรียบร้อย!' };
+        return { success: true, mode: 'neon', message: `บันทึกข้อมูลของ ${workout.user_name || 'ผู้ใช้งาน'} ขึ้น Neon Cloud เรียบร้อย!` };
       } catch (err: any) {
         console.warn('Could not save to Neon, saved locally:', err);
         return { 
@@ -146,7 +155,7 @@ class NeonDatabaseService {
       }
     }
 
-    return { success: true, mode: 'local', message: 'บันทึกประวัติการวิ่งลงในเครื่องเรียบร้อย' };
+    return { success: true, mode: 'local', message: `บันทึกประวัติการวิ่งของ ${workout.user_name || 'ผู้ใช้งาน'} ลงในเครื่องเรียบร้อย` };
   }
 
   /**
@@ -160,7 +169,7 @@ class NeonDatabaseService {
         const rows = await sql`
           SELECT * FROM treadmill_workouts 
           ORDER BY created_at DESC 
-          LIMIT 100;
+          LIMIT 200;
         `;
 
         if (rows && rows.length > 0) {
@@ -177,6 +186,9 @@ class NeonDatabaseService {
             avg_incline: Number(r.avg_incline),
             max_incline: Number(r.max_incline),
             fat_grams_burned: Number(r.fat_grams_burned),
+            user_id: r.user_id || undefined,
+            user_name: r.user_name || undefined,
+            user_avatar: r.user_avatar || undefined,
             user_weight_kg: r.user_weight_kg ? Number(r.user_weight_kg) : undefined,
             user_height_cm: r.user_height_cm ? Number(r.user_height_cm) : undefined,
             user_age: r.user_age ? Number(r.user_age) : undefined,
@@ -235,7 +247,7 @@ class NeonDatabaseService {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Treadmill Pro Tracker" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
-    <name>${workout.program_name || 'Treadmill Run'}</name>
+    <name>${workout.user_name ? workout.user_name + ' - ' : ''}${workout.program_name || 'Treadmill Run'}</name>
     <time>${timeIso}</time>
   </metadata>
   <trk>
@@ -259,6 +271,7 @@ class NeonDatabaseService {
     const headers = [
       'ID',
       'Date',
+      'Runner Name',
       'Program',
       'Duration (min)',
       'Distance (km)',
@@ -276,6 +289,7 @@ class NeonDatabaseService {
     const rows = workouts.map(w => [
       w.id,
       new Date(w.created_at).toLocaleString('th-TH'),
+      `"${(w.user_name || 'User').replace(/"/g, '""')}"`,
       `"${w.program_name.replace(/"/g, '""')}"`,
       (w.duration_seconds / 60).toFixed(1),
       (w.distance_meters / 1000).toFixed(2),
@@ -298,7 +312,7 @@ class NeonDatabaseService {
     const existing = this.getLocalWorkouts();
     const filtered = existing.filter(w => w.id !== workout.id);
     filtered.unshift(workout);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered.slice(0, 100)));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered.slice(0, 200)));
   }
 
   private getLocalWorkouts(): WorkoutRecord[] {

@@ -1,4 +1,7 @@
 export interface UserProfile {
+  id: string;
+  name: string;
+  avatar: string; // Emoji e.g. '🏃‍♂️', '🏃‍♀️', '⚡', '🔥'
   weightKg: number;
   heightCm: number;
   age: number;

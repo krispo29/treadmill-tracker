@@ -11,7 +11,11 @@ export interface WorkoutRecord {
   avg_incline: number;
   max_incline: number;
   fat_grams_burned: number;
-  // User Profile & Body Metrics for deep analysis
+  // Multi-Profile Tagging (No sign-up required)
+  user_id?: string;
+  user_name?: string;
+  user_avatar?: string;
+  // User Profile & Body Metrics at workout time
   user_weight_kg?: number;
   user_height_cm?: number;
   user_age?: number;
