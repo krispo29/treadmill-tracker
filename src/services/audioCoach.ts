@@ -100,6 +100,29 @@ class AudioCoachService {
   }
 
   /**
+   * Triumphant 5-tone fanfare chord celebration for Post-Workout Recap (Phase 3)
+   */
+  public playCelebrationFanfare() {
+    if (!this.soundEnabled) return;
+    this.initAudio();
+    if (!this.audioCtx) return;
+
+    const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51]; // C5, E5, G5, C6, E6
+    notes.forEach((freq, idx) => {
+      setTimeout(() => {
+        this.playTone(freq, 0.35, 'triangle');
+      }, idx * 110);
+    });
+
+    // Sustained triumphant chord
+    setTimeout(() => {
+      [523.25, 659.25, 783.99, 1046.50].forEach((freq) => {
+        this.playTone(freq, 0.6, 'sine');
+      });
+    }, 600);
+  }
+
+  /**
    * Speak a voice announcement using Web Speech API
    */
   public speak(text: string) {

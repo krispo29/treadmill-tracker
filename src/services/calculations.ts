@@ -241,3 +241,65 @@ export function getSpeedPillInfo(speed: number): SpeedPillInfo {
   }
   return { label: 'สปรินต์', icon: '🚀', color: 'border-rose-500/40 bg-rose-950/40 text-rose-300 hover:bg-rose-900/40' };
 }
+
+export interface CalorieReward {
+  thresholdKcal: number;
+  foodName: string;
+  emoji: string;
+  equivalentDetail: string;
+  motivationalQuote: string;
+}
+
+export const CALORIE_REWARDS: CalorieReward[] = [
+  {
+    thresholdKcal: 500,
+    foodName: 'ข้าวกะเพราหมูกรอบไข่ดาว',
+    emoji: '🍛',
+    equivalentDetail: 'เบิร์นทดแทนมื้อหนักจัดเต็ม 1 จานใหญ่ (500+ kcal)',
+    motivationalQuote: 'สุดยอดพลังงานระดับ Beast Mode! เผาผลาญมื้อใหญ่หมดเกลี้ยง!'
+  },
+  {
+    thresholdKcal: 380,
+    foodName: 'พิซซ่าหน้าชีส 2 ชิ้นโต',
+    emoji: '🍕',
+    equivalentDetail: 'เบิร์นพลังงานเท่ากับพิซซ่าหน้าโปรด 2 ชิ้นโต (~400 kcal)',
+    motivationalQuote: 'ฟอร์มวิ่งระดับพรีเมียม เผาผลาญสะใจมาก!'
+  },
+  {
+    thresholdKcal: 280,
+    foodName: 'ชานมไข่มุกหวานปกติ 1 แก้ว',
+    emoji: '🧋',
+    equivalentDetail: 'เบิร์นหมดแก้ว ไม่ต้องรู้สึกผิดอีกต่อไป (~300 kcal)',
+    motivationalQuote: 'ลบล้างแคลอรี่ชานมไข่มุกแก้วโปรดได้อย่างหมดจด!'
+  },
+  {
+    thresholdKcal: 180,
+    foodName: 'เฟรนช์ฟรายส์ทอดกรอบ',
+    emoji: '🍟',
+    equivalentDetail: 'เผาผลาญเทียบเท่าเฟรนช์ฟรายส์ทอดกรอบ 1 ซอง (~200 kcal)',
+    motivationalQuote: 'วิ่งสม่ำเสมอ ร่างกายแข็งแรงและเผาผลาญได้ดียิ่งขึ้น!'
+  },
+  {
+    thresholdKcal: 100,
+    foodName: 'กล้วยหอมทอง 1 ลูกใหญ่',
+    emoji: '🍌',
+    equivalentDetail: 'เผาผลาญพลังงานเท่ากับกล้วยหอมทอง 1 ลูก (~110 kcal)',
+    motivationalQuote: 'เซสชั่นคุณภาพ ร่างกายสดชื่นและกระปรี้กระเปร่า!'
+  },
+  {
+    thresholdKcal: 0,
+    foodName: 'แอปเปิ้ลฟูจิผลใหญ่ 1 ผล',
+    emoji: '🍎',
+    equivalentDetail: 'เบิร์นความสดชื่นเริ่มต้นการออกกำลังกาย (~80 kcal)',
+    motivationalQuote: 'ก้าวแรกของการขยับร่างกาย เยี่ยมมากที่เริ่มลงมือทำ!'
+  }
+];
+
+export function getCalorieReward(calories: number): CalorieReward {
+  for (const reward of CALORIE_REWARDS) {
+    if (calories >= reward.thresholdKcal) {
+      return reward;
+    }
+  }
+  return CALORIE_REWARDS[CALORIE_REWARDS.length - 1];
+}

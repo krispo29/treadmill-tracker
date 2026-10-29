@@ -46,6 +46,7 @@ import { NeonSettingsModal } from './components/NeonSettingsModal';
 import { ProfileManagerModal } from './components/ProfileManagerModal';
 import { DiagnosticDrawer } from './components/DiagnosticDrawer';
 import { GiantRunningHud } from './components/GiantRunningHud';
+import { WorkoutRecapModal } from './components/WorkoutRecapModal';
 
 const DEFAULT_PROFILES: UserProfile[] = [
   { 
@@ -148,6 +149,8 @@ export const App: React.FC = () => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isNeonModalOpen, setIsNeonModalOpen] = useState(false);
   const [isGiantHudOpen, setIsGiantHudOpen] = useState(false);
+  const [isRecapModalOpen, setIsRecapModalOpen] = useState(false);
+  const [latestSavedRecord, setLatestSavedRecord] = useState<WorkoutRecord | null>(null);
   const [compactMode, setCompactMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
@@ -160,6 +163,8 @@ export const App: React.FC = () => {
   // Peak tracking for stats
   const maxSpeedRef = useRef<number>(0);
   const maxInclineRef = useRef<number>(0);
+  const wasRunningRef = useRef<boolean>(false);
+  const autoSaveDebounceRef = useRef<boolean>(false);
 
   // Multi-Profile Management (No login required)
   const [profiles, setProfiles] = useState<UserProfile[]>(() => {
@@ -219,12 +224,26 @@ export const App: React.FC = () => {
     );
   }, [workoutState.soundEnabled, workoutState.voiceEnabled, workoutState.language]);
 
+  const saveSessionRef = useRef<(reason?: string, isManual?: boolean) => Promise<void>>(() => Promise.resolve());
+
   useEffect(() => {
     bluetoothService.setCallbacks(
       (newMetrics) => {
         setMetrics(newMetrics);
         if (newMetrics.speedKmh > maxSpeedRef.current) maxSpeedRef.current = newMetrics.speedKmh;
         if (newMetrics.inclineLevel > maxInclineRef.current) maxInclineRef.current = newMetrics.inclineLevel;
+
+        // Auto-detect when belt stops running (Phase 3)
+        if (newMetrics.speedKmh > 0.5) {
+          wasRunningRef.current = true;
+          autoSaveDebounceRef.current = false;
+        } else if (newMetrics.speedKmh <= 0.05 && wasRunningRef.current) {
+          wasRunningRef.current = false;
+          if (!autoSaveDebounceRef.current && (newMetrics.elapsedSeconds >= 15 || newMetrics.distanceMeters >= 30)) {
+            autoSaveDebounceRef.current = true;
+            saveSessionRef.current('วิ่งจบเซสชั่น (Auto-saved)');
+          }
+        }
       },
       (newStatus, newProtocol, name) => {
         setStatus(newStatus);
@@ -340,15 +359,21 @@ export const App: React.FC = () => {
     }
   };
 
+  const resetAfterWorkout = () => {
+    bluetoothService.resetSession();
+    setTelemetry([]);
+    maxSpeedRef.current = 0;
+    maxInclineRef.current = 0;
+    wasRunningRef.current = false;
+    autoSaveDebounceRef.current = false;
+    if (workoutState.program) {
+      setWorkoutState((prev) => ({ ...prev, program: null, currentStepIndex: 0, stepElapsedSeconds: 0 }));
+    }
+  };
+
   const handleResetSession = () => {
     if (window.confirm('คุณต้องการรีเซ็ตสถิติรอบนี้ใช่หรือไม่?')) {
-      bluetoothService.resetSession();
-      setTelemetry([]);
-      maxSpeedRef.current = 0;
-      maxInclineRef.current = 0;
-      if (workoutState.program) {
-        setWorkoutState((prev) => ({ ...prev, currentStepIndex: 0, stepElapsedSeconds: 0 }));
-      }
+      resetAfterWorkout();
     }
   };
 
@@ -521,6 +546,11 @@ export const App: React.FC = () => {
     await neonDatabase.saveWorkout(record);
     setIsSaving(false);
 
+    // Open Post-Workout Reward Celebration Recap Modal (Phase 3)
+    setLatestSavedRecord(record);
+    setIsRecapModalOpen(true);
+    setIsGiantHudOpen(false); // Close giant HUD so recap modal takes full focus
+
     const distKm = (metrics.distanceMeters / 1000).toFixed(2);
     const timeFormatted = formatDuration(metrics.elapsedSeconds);
     const kcal = Math.round(metrics.caloriesBurned);
@@ -529,6 +559,8 @@ export const App: React.FC = () => {
     setSaveSuccessMsg(successText);
     setTimeout(() => setSaveSuccessMsg(null), 5000);
   };
+
+  saveSessionRef.current = saveSessionRecord;
 
   const handleManualSaveWorkout = () => {
     saveSessionRecord('Manual Save', true);
@@ -852,6 +884,20 @@ export const App: React.FC = () => {
         onStart={handleStartTreadmill}
         onStop={handleStopTreadmill}
         deviceName={deviceName}
+      />
+
+      {/* Post-Workout Reward Celebration Recap Card (Phase 3) */}
+      <WorkoutRecapModal
+        isOpen={isRecapModalOpen}
+        record={latestSavedRecord}
+        onClose={() => {
+          setIsRecapModalOpen(false);
+          resetAfterWorkout();
+        }}
+        onViewHistory={() => {
+          setIsRecapModalOpen(false);
+          setIsHistoryModalOpen(true);
+        }}
       />
 
       {/* Bluetooth Error / Permission Guide Modal */}
