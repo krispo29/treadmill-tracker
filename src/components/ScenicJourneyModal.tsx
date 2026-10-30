@@ -15,7 +15,8 @@ import {
   Sparkles,
   Eye,
   EyeOff,
-  Tv
+  Tv,
+  Clock
 } from 'lucide-react';
 import type { TreadmillMetrics, UserProfile } from '../types/treadmill';
 import { formatDuration, formatPace } from '../services/calculations';
@@ -23,6 +24,39 @@ import { audioCoach } from '../services/audioCoach';
 
 export type ScenicTheme = 'sakura' | 'countryside' | 'sunset' | 'night';
 export type CompanionType = 'shiba' | 'cat' | 'bunny' | 'none';
+
+/**
+ * Automatically determine the scenic theme according to the real-world local time:
+ * - 06:00 - 10:59: Sakura Morning (ซากุระ ยามเช้าสดชื่น)
+ * - 11:00 - 16:59: Cozy Countryside (ชนบทอบอุ่น ยามกลางวัน)
+ * - 17:00 - 18:59: Sunset Beach (เลียบหาด ตะวันตกดิน แดดสีทอง เช่นเวลา 18.00 น.)
+ * - 19:00 - 05:59: Starry Night (คืนดาวพราว ยามค่ำคืน)
+ */
+export const getThemeForCurrentTime = (date: Date = new Date()): ScenicTheme => {
+  const hour = date.getHours();
+  // 17:00 - 18:59 (5 PM - 6:59 PM): Sunset / Golden hour (18.00 น. โชว์ตะวันตกดิน)
+  if (hour >= 17 && hour < 19) {
+    return 'sunset';
+  }
+  // 19:00 - 05:59 (7 PM - 5:59 AM): Night / Starry sky
+  if (hour >= 19 || hour < 6) {
+    return 'night';
+  }
+  // 06:00 - 10:59 (6 AM - 10:59 AM): Sakura Morning
+  if (hour >= 6 && hour < 11) {
+    return 'sakura';
+  }
+  // 11:00 - 16:59 (11 AM - 4:59 PM): Cozy Countryside / Afternoon
+  return 'countryside';
+};
+
+export const getTimePeriodLabel = (date: Date = new Date()): string => {
+  const hour = date.getHours();
+  if (hour >= 17 && hour < 19) return 'ตะวันตกดิน (17:00-19:00)';
+  if (hour >= 19 || hour < 6) return 'ค่ำคืนดาวพราว';
+  if (hour >= 6 && hour < 11) return 'เช้าสดชื่น (ซากุระ)';
+  return 'กลางวันอบอุ่น (ชนบท)';
+};
 
 interface ScenicJourneyModalProps {
   isOpen: boolean;
@@ -63,12 +97,37 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // User Settings & Modes
-  const [theme, setTheme] = useState<ScenicTheme>('sakura');
+  // User Settings & Real-World Time Theme
+  // Default: isAutoTheme = true (syncs with real-world time e.g. 18:00 shows sunset)
+  // If user clicks a specific theme, isAutoTheme becomes false without forcing
+  const [isAutoTheme, setIsAutoTheme] = useState(true);
+  const [manualTheme, setManualTheme] = useState<ScenicTheme>(() => getThemeForCurrentTime(new Date()));
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+
+  // Active theme dynamically computed
+  const theme: ScenicTheme = isAutoTheme ? getThemeForCurrentTime(currentTime) : manualTheme;
+
   const [companion, setCompanion] = useState<CompanionType>('shiba');
   const [zenMode, setZenMode] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Update clock every 10 seconds to auto-transition time periods smoothly
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleSelectTheme = (selectedTheme: ScenicTheme) => {
+    setIsAutoTheme(false);
+    setManualTheme(selectedTheme);
+  };
+
+  const handleEnableAutoTheme = () => {
+    setIsAutoTheme(true);
+  };
 
   // Target values for local quick controls
   const defaultStartSpeed = activeProfile?.defaultStartSpeed ?? 3.0;
@@ -1030,6 +1089,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const durationStr = formatDuration(metrics.elapsedSeconds);
   const caloriesStr = Math.round(metrics.caloriesBurned).toString();
   const paceStr = formatPace(metrics.currentPaceSecPerKm);
+  const currentTimeStr = currentTime.toLocaleTimeString('th-TH', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: false 
+  });
 
   return (
     <div 
@@ -1049,43 +1113,90 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }`}>
         {/* Left: Theme Switcher & Companion Picker */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Theme Selector */}
-          <div className="flex items-center gap-1 bg-white/85 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-[#EDE6DC] shadow-cozy-sm text-xs font-medium">
+          {/* Theme Selector with Real-World Time Auto-Sync */}
+          <div className="flex items-center gap-1 bg-white/90 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-[#EDE6DC] shadow-cozy-sm text-xs font-medium">
+            {/* Auto Real-Time Mode Toggle */}
             <button
-              onClick={() => setTheme('sakura')}
-              className={`px-2 py-1 rounded-xl transition-all cursor-pointer ${
-                theme === 'sakura' ? 'bg-[#52796F] text-white font-bold' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              onClick={handleEnableAutoTheme}
+              className={`px-2.5 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                isAutoTheme 
+                  ? 'bg-[#52796F] text-white font-bold shadow-cozy-sm' 
+                  : 'text-[#5A5047] hover:bg-[#FAF7F2]'
               }`}
-              title="หุบเขาซากุระ"
+              title={`ปรับธีมอัตโนมัติตามเวลาจริง (ขณะนี้ ${currentTimeStr} น. - ${getTimePeriodLabel(currentTime)})`}
             >
-              🌸 ซากุระ
+              <Clock className="w-3 h-3" />
+              <span>เวลาจริง ({currentTimeStr})</span>
             </button>
+
+            <span className="text-[#D7CEC3] text-[11px] px-0.5">|</span>
+
+            {/* Sakura Morning (06:00 - 11:00) */}
             <button
-              onClick={() => setTheme('countryside')}
-              className={`px-2 py-1 rounded-xl transition-all cursor-pointer ${
-                theme === 'countryside' ? 'bg-[#52796F] text-white font-bold' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              onClick={() => handleSelectTheme('sakura')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                !isAutoTheme && theme === 'sakura'
+                  ? 'bg-[#52796F] text-white font-bold shadow-cozy-sm'
+                  : isAutoTheme && theme === 'sakura'
+                  ? 'bg-[#EAF2EC] text-[#3B664E] font-semibold border border-[#CDE0D3]'
+                  : 'text-[#5A5047] hover:bg-[#FAF7F2]'
               }`}
-              title="ทุ่งหญ้าชนบท"
+              title="หุบเขาซากุระ (เช้าตรู่ 06:00 - 11:00)"
             >
-              ☕ ชนบท
+              <span>🌸</span>
+              <span>ซากุระ</span>
+              {isAutoTheme && theme === 'sakura' && <span className="text-[9px] opacity-75">●</span>}
             </button>
+
+            {/* Cozy Countryside (11:00 - 17:00) */}
             <button
-              onClick={() => setTheme('sunset')}
-              className={`px-2 py-1 rounded-xl transition-all cursor-pointer ${
-                theme === 'sunset' ? 'bg-[#52796F] text-white font-bold' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              onClick={() => handleSelectTheme('countryside')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                !isAutoTheme && theme === 'countryside'
+                  ? 'bg-[#52796F] text-white font-bold shadow-cozy-sm'
+                  : isAutoTheme && theme === 'countryside'
+                  ? 'bg-[#EAF2EC] text-[#3B664E] font-semibold border border-[#CDE0D3]'
+                  : 'text-[#5A5047] hover:bg-[#FAF7F2]'
               }`}
-              title="เลียบหาดอัสดง"
+              title="ทุ่งหญ้าชนบท (กลางวัน 11:00 - 17:00)"
             >
-              🌅 ตะวันตกดิน
+              <span>☕</span>
+              <span>ชนบท</span>
+              {isAutoTheme && theme === 'countryside' && <span className="text-[9px] opacity-75">●</span>}
             </button>
+
+            {/* Sunset Beach (17:00 - 19:00 e.g. 18:00) */}
             <button
-              onClick={() => setTheme('night')}
-              className={`px-2 py-1 rounded-xl transition-all cursor-pointer ${
-                theme === 'night' ? 'bg-[#52796F] text-white font-bold' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              onClick={() => handleSelectTheme('sunset')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                !isAutoTheme && theme === 'sunset'
+                  ? 'bg-[#52796F] text-white font-bold shadow-cozy-sm'
+                  : isAutoTheme && theme === 'sunset'
+                  ? 'bg-[#EAF2EC] text-[#3B664E] font-semibold border border-[#CDE0D3]'
+                  : 'text-[#5A5047] hover:bg-[#FAF7F2]'
               }`}
-              title="คืนดาวพราว"
+              title="เลียบหาดอัสดง (ตะวันตกดิน 17:00 - 19:00 เช่น 18.00 น.)"
             >
-              🌙 คืนดาว
+              <span>🌅</span>
+              <span>ตะวันตกดิน</span>
+              {isAutoTheme && theme === 'sunset' && <span className="text-[9px] opacity-75">●</span>}
+            </button>
+
+            {/* Starry Night (19:00 - 06:00) */}
+            <button
+              onClick={() => handleSelectTheme('night')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                !isAutoTheme && theme === 'night'
+                  ? 'bg-[#52796F] text-white font-bold shadow-cozy-sm'
+                  : isAutoTheme && theme === 'night'
+                  ? 'bg-[#EAF2EC] text-[#3B664E] font-semibold border border-[#CDE0D3]'
+                  : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              }`}
+              title="คืนดาวพราว (ค่ำคืน 19:00 - 06:00)"
+            >
+              <span>🌙</span>
+              <span>คืนดาว</span>
+              {isAutoTheme && theme === 'night' && <span className="text-[9px] opacity-75">●</span>}
             </button>
           </div>
 
