@@ -29,6 +29,9 @@ export interface ScenicSessionState {
   isZenMode: boolean;
   hasCapturedPostcard: boolean;
   maxSpeedKmh: number;
+  encounteredDeer?: boolean;
+  encounteredLantern?: boolean;
+  encounteredTrain?: boolean;
 }
 
 export interface UnlockedAchievementRecord {
@@ -252,6 +255,33 @@ export const ACHIEVEMENT_CATALOG: AchievementItem[] = [
     tier: 'silver',
     checkUnlock: (_, s) => s.hasCapturedPostcard,
   },
+  {
+    id: 'encounter_deer',
+    title: 'กวางนาราทักทาย 🦌',
+    description: 'ได้รับการก้มคำนับต้อนรับจากกวางนาราแสนสุภาพริมทาง',
+    icon: '🦌',
+    category: 'secret',
+    tier: 'bronze',
+    checkUnlock: (_, s) => !!s.encounteredDeer,
+  },
+  {
+    id: 'encounter_cat',
+    title: 'พรแมวนำโชค 🐾',
+    description: 'พบแมวสามสีศาลเจ้าโบราณนั่งเชียร์บนตะเกียงหิน',
+    icon: '🐾',
+    category: 'secret',
+    tier: 'bronze',
+    checkUnlock: (_, s) => !!s.encounteredLantern,
+  },
+  {
+    id: 'encounter_train',
+    title: 'รถไฟสายโรแมนติก 🚃',
+    description: 'โบกมือทักทายรถไฟโบราณ Enoden ที่แล่นผ่านเชิงเขา',
+    icon: '🚃',
+    category: 'secret',
+    tier: 'silver',
+    checkUnlock: (_, s) => !!s.encounteredTrain,
+  },
 ];
 
 // Persistent storage helpers
@@ -319,5 +349,51 @@ export function playSteamAchievementChime(audioCtx?: AudioContext | null): void 
     });
   } catch (err) {
     console.warn('Could not play Steam achievement chime:', err);
+  }
+}
+
+/**
+ * Procedural Web Audio Synthesis for Nostalgic Japanese Train Whistle (Toot-Toot! 🚃)
+ * Warm dual-tone chord (F#4 370Hz + A4 440Hz) with gentle acoustic swell
+ */
+export function playTrainWhistleTone(audioCtx?: AudioContext | null): void {
+  try {
+    let ctx = audioCtx;
+    if (!ctx) {
+      const AudioClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioClass) ctx = new AudioClass();
+    }
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+    const now = ctx.currentTime;
+    const blasts = [
+      { start: 0.0, dur: 0.38 },
+      { start: 0.46, dur: 0.75 },
+    ];
+
+    blasts.forEach(({ start, dur }) => {
+      [369.99, 440.00, 554.37].forEach((freq, fIdx) => {
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + start);
+
+        const peakGain = fIdx === 0 ? 0.035 : 0.025;
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(peakGain, now + start + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + dur);
+      });
+    });
+  } catch (err) {
+    console.warn('Could not play train whistle:', err);
   }
 }

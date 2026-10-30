@@ -31,6 +31,7 @@ import {
   getUnlockedAchievementIds,
   saveUnlockedAchievementId,
   playSteamAchievementChime,
+  playTrainWhistleTone,
   getFoodsBurned,
   type AchievementItem
 } from '../services/scenicAchievements';
@@ -211,6 +212,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const [unlockedCount, setUnlockedCount] = useState<number>(() => getUnlockedAchievementIds().length);
   const maxSpeedReachedRef = useRef<number>(0);
   const hasCapturedPostcardRef = useRef<boolean>(false);
+
+  // Phase 2: Roadside Encounters Tracking Refs
+  const encounteredDeerRef = useRef<boolean>(false);
+  const encounteredLanternRef = useRef<boolean>(false);
+  const encounteredTrainRef = useRef<boolean>(false);
 
   const handleDismissAchievement = (id: string) => {
     setAchievementQueue((prev) => prev.filter((item) => item.id !== id));
@@ -438,6 +444,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     lastWeather: ScenicWeather;
     pacerDistance: number;
     pacerCadencePhase: number;
+    trainX: number;
+    trainActive: boolean;
+    trainCooldown: number;
+    trainWhistlePlayed: boolean;
     particles: Particle[];
     ripples: RainRipple[];
   }>({
@@ -454,6 +464,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     lastWeather: 'clear',
     pacerDistance: 0,
     pacerCadencePhase: 0,
+    trainX: -500,
+    trainActive: false,
+    trainCooldown: 12,
+    trainWhistlePlayed: false,
     particles: [],
     ripples: [],
   });
@@ -494,6 +508,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     petShiba: HTMLImageElement | null;
     petCat: HTMLImageElement | null;
     petBunny: HTMLImageElement | null;
+    encounterDeer: HTMLImageElement | null;
+    encounterLantern: HTMLImageElement | null;
+    encounterTrain: HTMLImageElement | null;
+    encounterUmbrella: HTMLImageElement | null;
   }>({
     runnerRun: null,
     runnerIdle: null,
@@ -511,6 +529,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     petShiba: null,
     petCat: null,
     petBunny: null,
+    encounterDeer: null,
+    encounterLantern: null,
+    encounterTrain: null,
+    encounterUmbrella: null,
   });
 
   useEffect(() => {
@@ -542,6 +564,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           petShiba,
           petCat,
           petBunny,
+          encounterDeer,
+          encounterLantern,
+          encounterTrain,
+          encounterUmbrella,
         ] = await Promise.all([
           loadImg('/assets/scenic/runner-female-run.png'),
           loadImg('/assets/scenic/runner-female-idle.png'),
@@ -559,6 +585,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           loadImg('/assets/scenic/pet-shiba-run.png'),
           loadImg('/assets/scenic/pet-cat-run.png'),
           loadImg('/assets/scenic/pet-bunny-hop.png'),
+          loadImg('/assets/scenic/encounter-deer.png'),
+          loadImg('/assets/scenic/encounter-lantern.png'),
+          loadImg('/assets/scenic/encounter-train.png'),
+          loadImg('/assets/scenic/encounter-umbrella.png'),
         ]);
 
         assetsRef.current = {
@@ -578,6 +608,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           petShiba,
           petCat,
           petBunny,
+          encounterDeer,
+          encounterLantern,
+          encounterTrain,
+          encounterUmbrella,
         };
         setAssetsLoaded(true);
       } catch (err) {
@@ -695,6 +729,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       isZenMode: zenMode,
       hasCapturedPostcard: hasCapturedPostcardRef.current,
       maxSpeedKmh: maxSpeedReachedRef.current,
+      encounteredDeer: encounteredDeerRef.current,
+      encounteredLantern: encounteredLanternRef.current,
+      encounteredTrain: encounteredTrainRef.current,
     };
 
     const newlyUnlocked: AchievementItem[] = [];
@@ -1373,6 +1410,59 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.restore();
       }
 
+      // ==========================================
+      // PHASE 2 ENCOUNTER: RETRO ENODEN TRAIN (Scenic Horizon Railway)
+      // ==========================================
+      state.trainCooldown -= dt;
+      if (state.trainCooldown <= 0 && !state.trainActive) {
+        state.trainActive = true;
+        state.trainX = -380;
+        state.trainWhistlePlayed = false;
+      }
+
+      if (state.trainActive) {
+        const trainSpeed = 135 + (isMoving ? speed * 10 : 25);
+        state.trainX += trainSpeed * dt;
+
+        // Play authentic Japanese train whistle when it enters screen
+        if (!state.trainWhistlePlayed && state.trainX > width * 0.08) {
+          state.trainWhistlePlayed = true;
+          encounteredTrainRef.current = true;
+          if (soundEnabled) {
+            playTrainWhistleTone(ambientAudioCtxRef.current);
+          }
+        }
+
+        if (assets.encounterTrain && state.trainX >= -400 && state.trainX <= width + 400) {
+          const trainW = 195;
+          const trainH = 80;
+          const trainY = midHillY - trainH + 12;
+
+          ctx.save();
+          if (theme === 'night') {
+            ctx.filter = 'brightness(0.68) saturate(0.9)';
+          } else if (theme === 'sunset') {
+            ctx.filter = 'brightness(0.95) saturate(1.15) hue-rotate(-6deg)';
+          }
+          ctx.drawImage(assets.encounterTrain, state.trainX, trainY, trainW, trainH);
+
+          // Cozy glowing passenger windows
+          ctx.fillStyle = theme === 'night' 
+            ? 'rgba(255, 230, 140, 0.55)' 
+            : theme === 'sunset'
+            ? 'rgba(255, 240, 180, 0.40)'
+            : 'rgba(255, 255, 230, 0.28)';
+          ctx.fillRect(state.trainX + 22, trainY + 24, trainW - 44, 13);
+          ctx.restore();
+        }
+
+        if (state.trainX > width + 450) {
+          state.trainActive = false;
+          // Cooldown 60 to 90 seconds until the next train passes by
+          state.trainCooldown = 60 + Math.random() * 30;
+        }
+      }
+
       // Windmill or Cozy House in Countryside
       if (theme === 'countryside') {
         const millX = ((width * 0.35 - midScroll) % (width + 600) + width + 600) % (width + 600) - 100;
@@ -1602,11 +1692,168 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         }
       }
 
+      // Fixed screen horizontal position (runner runs in place like a treadmill!)
+      const runnerX = width * 0.40;
+
+      // ==========================================
+      // PHASE 2: ROADSIDE RANDOM ENCOUNTERS (Guests Along the Path)
+      // ==========================================
+      // A. Nara Bowing Sika Deer (Every 1000m at +700m offset: 700m, 1700m, 2700m...)
+      if (assets.encounterDeer) {
+        const deerDist = Math.floor(currentDistanceMeters / 1000) * 1000 + 700;
+        const deerRel = deerDist - currentDistanceMeters;
+        const deerX = width * 0.45 + deerRel * 1.5;
+        if (deerX >= -120 && deerX <= width + 120) {
+          const t = (deerX - (-20)) / (width + 40);
+          const roadY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const deerW = 75;
+          const deerH = 86;
+          const deerBaseY = roadY - 4; // Stands on grass verge
+
+          const distToRunner = Math.abs(deerX - runnerX);
+          const isNear = distToRunner < 120;
+          if (isNear) {
+            encounteredDeerRef.current = true;
+          }
+
+          const bowAngle = isNear ? Math.sin(windTime * 5) * 0.10 : 0;
+          const bowY = isNear ? Math.abs(Math.sin(windTime * 5)) * 4 : 0;
+
+          ctx.save();
+          ctx.translate(deerX, deerBaseY);
+          ctx.rotate(-inclineAngle);
+
+          // Soft drop shadow
+          ctx.fillStyle = 'rgba(30, 45, 30, 0.22)';
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 22, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Deer sprite
+          ctx.translate(0, -bowY);
+          ctx.rotate(bowAngle);
+          ctx.drawImage(assets.encounterDeer, -deerW / 2, -deerH, deerW, deerH);
+
+          // Speech bubble when runner is near
+          if (isNear && deerX > 60 && deerX < width - 60) {
+            ctx.save();
+            const bubbleY = -deerH - 24;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = '#D4AF37';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-46, bubbleY, 92, 22, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#443830';
+            ctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🦌 ยินดีต้อนรับ!', 0, bubbleY + 11);
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+      }
+
+      // B. Lucky Shrine Stone Lantern with Calico Cat (Every 1000m at +300m offset: 300m, 1300m, 2300m...)
+      if (assets.encounterLantern) {
+        const lanternDist = Math.floor(currentDistanceMeters / 1000) * 1000 + 300;
+        const lanternRel = lanternDist - currentDistanceMeters;
+        const lanternX = width * 0.45 + lanternRel * 1.5;
+        if (lanternX >= -80 && lanternX <= width + 80) {
+          const t = (lanternX - (-20)) / (width + 40);
+          const roadY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const lanternW = 50;
+          const lanternH = 105;
+
+          const distToRunner = Math.abs(lanternX - runnerX);
+          const isNear = distToRunner < 110;
+          if (isNear) {
+            encounteredLanternRef.current = true;
+          }
+
+          ctx.save();
+          ctx.translate(lanternX, roadY);
+          ctx.rotate(-inclineAngle);
+
+          // Soft drop shadow
+          ctx.fillStyle = 'rgba(30, 40, 30, 0.24)';
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 20, 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.drawImage(assets.encounterLantern, -lanternW / 2, -lanternH, lanternW, lanternH);
+
+          // Floating lucky cheer bubble
+          if (isNear && lanternX > 50 && lanternX < width - 50) {
+            ctx.save();
+            const bubbleY = -lanternH - 24;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = '#E3B873';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-42, bubbleY, 84, 22, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#B67A28';
+            ctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🐾 แมวนำโชค!', 0, bubbleY + 11);
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+      }
+
+      // C. Japanese Nodategasa Tea Bench (Every 1000m at +900m offset: 900m, 1900m, 2900m...)
+      if (assets.encounterUmbrella) {
+        const umbrellaDist = Math.floor(currentDistanceMeters / 1000) * 1000 + 900;
+        const umbrellaRel = umbrellaDist - currentDistanceMeters;
+        const umbrellaX = width * 0.45 + umbrellaRel * 1.5;
+        if (umbrellaX >= -90 && umbrellaX <= width + 90) {
+          const t = (umbrellaX - (-20)) / (width + 40);
+          const roadY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const umbrellaW = 82;
+          const umbrellaH = 90;
+
+          ctx.save();
+          ctx.translate(umbrellaX, roadY);
+          ctx.rotate(-inclineAngle);
+
+          // Drop shadow
+          ctx.fillStyle = 'rgba(35, 30, 25, 0.22)';
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 28, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.drawImage(assets.encounterUmbrella, -umbrellaW / 2, -umbrellaH, umbrellaW, umbrellaH);
+
+          // Animated Rising Matcha Green Tea Steam from cup
+          const steamPhase = windTime * 2.5;
+          ctx.lineWidth = 1.2;
+          ctx.lineCap = 'round';
+          for (let s = 0; s < 3; s++) {
+            const steamProgress = ((steamPhase + s * 0.8) % 2.5) / 2.5;
+            const sY = -umbrellaH * 0.38 - steamProgress * 16;
+            const sX = 8 + Math.sin(steamProgress * Math.PI * 2) * 3;
+            const sAlpha = Math.sin(steamProgress * Math.PI) * 0.55;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${sAlpha})`;
+            ctx.beginPath();
+            ctx.moveTo(sX, sY);
+            ctx.quadraticCurveTo(sX + 2, sY - 4, sX, sY - 8);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+
       // ------------------------------------------
       // 7. RUNNER CHARACTER & COMPANION
       // ------------------------------------------
-      // Fixed screen horizontal position (runner runs in place like a treadmill!)
-      const runnerX = width * 0.40;
       // Interpolate runner's foot level on the inclined road
       const runnerRoadY = roadLeftY + (roadRightY - roadLeftY) * ((runnerX - (-20)) / (width + 40));
 
@@ -2236,15 +2483,19 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   // Companion emoji helper
   const companionEmoji = companion === 'shiba' ? '🐕' : companion === 'cat' ? '🐱' : companion === 'bunny' ? '🐰' : null;
 
-  // Key milestones along the journey to mark on the progress track
+  // Key milestones and roadside encounters along the journey
   const landmarkPins = [
-    { km: 0.5, label: 'ซุ้มกาแฟ', icon: '☕' },
+    { km: 0.3, label: 'แมวนำโชคศาลเจ้า', icon: '🐾' },
+    { km: 0.5, label: 'ซุ้มกาแฟดริป', icon: '☕' },
+    { km: 0.7, label: 'กวางนาราทักทาย', icon: '🦌' },
+    { km: 0.9, label: 'ซุ้มน้ำชาร่มแดง', icon: '🍵' },
     { km: 1.0, label: 'สะพานซากุระ', icon: '🌸' },
+    { km: 1.2, label: 'ทางรถไฟโบราณ', icon: '🚃' },
     { km: 1.5, label: 'หมู่บ้านชนบท', icon: '🏡' },
     { km: 2.0, label: 'ทุ่งดอกไม้', icon: '🌾' },
-    { km: 2.5, label: 'จุดชมวิว', icon: '🏔️' },
+    { km: 2.5, label: 'จุดชมวิวเทือกเขา', icon: '🏔️' },
     { km: 3.0, label: 'ประตูโทริอิ', icon: '⛩️' },
-    { km: 4.0, label: 'ทะเลสาบ', icon: '🌊' },
+    { km: 4.0, label: 'ริมทะเลสาบ', icon: '🌊' },
     { km: targetKm, label: 'เส้นชัย', icon: '🏁' },
   ].filter((p, idx, arr) => p.km <= targetKm && (idx === arr.length - 1 || p.km < targetKm));
 
