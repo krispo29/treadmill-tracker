@@ -17,7 +17,9 @@ import {
   EyeOff,
   Tv,
   Clock,
-  Music
+  Music,
+  Camera,
+  Ghost
 } from 'lucide-react';
 import type { TreadmillMetrics, UserProfile, WorkoutGoal } from '../types/treadmill';
 import { formatDuration, formatPace } from '../services/calculations';
@@ -173,6 +175,29 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     }
   };
 
+  // Phase 4: Ghost Pacer State & Postcard Capture
+  const [pacerEnabled, setPacerEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('scenic_pacer_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [pacerSpeed, setPacerSpeed] = useState<number>(() => {
+    try {
+      const s = localStorage.getItem('scenic_pacer_speed');
+      return s ? parseFloat(s) : 6.0;
+    } catch {
+      return 6.0;
+    }
+  });
+  const [pacerDeltaDisplay, setPacerDeltaDisplay] = useState<number>(0);
+  const [isCapturingPostcard, setIsCapturingPostcard] = useState<boolean>(false);
+  const [showShutterFlash, setShowShutterFlash] = useState<boolean>(false);
+
+  const pacerEnabledRef = useRef(pacerEnabled);
+  const pacerSpeedRef = useRef(pacerSpeed);
+
   // Refs to preserve continuous rendering without resetting the canvas engine
   const metricsRef = useRef(metrics);
   const themeRef = useRef(theme);
@@ -187,7 +212,187 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     companionRef.current = companion;
     weatherRef.current = weather;
     soundEnabledRef.current = soundEnabled;
+    pacerEnabledRef.current = pacerEnabled;
+    pacerSpeedRef.current = pacerSpeed;
   });
+
+  const handleTogglePacer = () => {
+    const next = !pacerEnabled;
+    setPacerEnabled(next);
+    try {
+      localStorage.setItem('scenic_pacer_enabled', next.toString());
+    } catch {}
+  };
+
+  const handleAdjustPacerSpeed = (delta: number) => {
+    const next = Math.max(2.0, Math.min(18.0, Math.round((pacerSpeed + delta) * 10) / 10));
+    setPacerSpeed(next);
+    try {
+      localStorage.setItem('scenic_pacer_speed', next.toString());
+    } catch {}
+  };
+
+  const handleCapturePostcard = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || isCapturingPostcard) return;
+
+    setIsCapturingPostcard(true);
+    setShowShutterFlash(true);
+    setTimeout(() => setShowShutterFlash(false), 320);
+
+    try {
+      const postCanvas = document.createElement('canvas');
+      postCanvas.width = 1200;
+      postCanvas.height = 800;
+      const pctx = postCanvas.getContext('2d');
+      if (!pctx) return;
+
+      // 1. Postcard Base Canvas (Cozy Warm Wabi-Sabi Cream Cardstock #FAF7F2)
+      pctx.fillStyle = '#FAF7F2';
+      pctx.fillRect(0, 0, 1200, 800);
+
+      // Subtle textured border margin
+      pctx.strokeStyle = '#E7DFD5';
+      pctx.lineWidth = 2;
+      pctx.strokeRect(20, 20, 1160, 760);
+
+      // 2. Main Scenic Photo Inset (Polaroid Snapshot)
+      const photoX = 45;
+      const photoY = 45;
+      const photoW = 1110;
+      const photoH = 550;
+
+      // Photo drop shadow
+      pctx.save();
+      pctx.fillStyle = 'rgba(44, 38, 33, 0.08)';
+      pctx.fillRect(photoX + 4, photoY + 4, photoW, photoH);
+      pctx.restore();
+
+      // Draw scenic canvas snapshot into photo area
+      pctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, photoX, photoY, photoW, photoH);
+
+      // Subtle thin photo inner border
+      pctx.strokeStyle = '#D9CFBF';
+      pctx.lineWidth = 1;
+      pctx.strokeRect(photoX, photoY, photoW, photoH);
+
+      // 3. Traditional Vermilion Red Postal Seal Stamp (Inkan / Hanko)
+      const sealX = photoX + photoW - 75;
+      const sealY = photoY + 70;
+      pctx.save();
+      pctx.translate(sealX, sealY);
+      pctx.rotate(-0.08); // Slight organic rotation for stamp authenticity
+
+      // Double seal border
+      pctx.strokeStyle = '#C44536';
+      pctx.lineWidth = 2.5;
+      pctx.beginPath();
+      pctx.roundRect(-55, -45, 110, 90, 8);
+      pctx.stroke();
+
+      pctx.lineWidth = 1.2;
+      pctx.beginPath();
+      pctx.roundRect(-50, -40, 100, 80, 6);
+      pctx.stroke();
+
+      pctx.fillStyle = '#C44536';
+      pctx.font = '900 13px "Noto Serif JP", "Hiragino Mincho ProN", serif';
+      pctx.textAlign = 'center';
+      pctx.textBaseline = 'middle';
+      pctx.fillText('🗻 富士山', 0, -18);
+      pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+      pctx.fillText('SCENIC RUN', 0, 4);
+      pctx.font = 'bold 8px ui-monospace, monospace';
+      pctx.fillText(new Date().toLocaleDateString('ja-JP').replace(/\//g, '.'), 0, 22);
+      pctx.restore();
+
+      // 4. Bottom Metadata Area
+      const metaBaseY = 635;
+      pctx.fillStyle = '#2C2621';
+      pctx.font = 'bold 26px "Cinzel", "Playfair Display", Georgia, serif';
+      pctx.textAlign = 'left';
+      pctx.textBaseline = 'top';
+      pctx.fillText('JOURNEY MEMORIES', 55, metaBaseY);
+
+      pctx.fillStyle = '#7A6E65';
+      pctx.font = '500 13px ui-sans-serif, system-ui, sans-serif';
+      const themeThLabel = theme === 'sakura' ? 'ซากุระสปริง' : theme === 'countryside' ? 'ชนบทอบอุ่น' : theme === 'sunset' ? 'ตะวันตกดิน' : 'ราตรีใต้แสงดาว';
+      const companionThLabel = companion === 'shiba' ? '🐕 ชิบะ' : companion === 'cat' ? '🐈 แมวส้ม' : companion === 'bunny' ? '🐇 กระต่าย' : '🏃‍♀️ วิ่งเดี่ยว';
+      pctx.fillText(`เส้นทาง: ${themeThLabel}  •  เพื่อนร่วมทาง: ${companionThLabel}  •  โดย ${activeProfile.name || 'Athlete'}`, 55, metaBaseY + 36);
+
+      const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      pctx.fillStyle = '#A0958B';
+      pctx.font = '11px ui-monospace, monospace';
+      pctx.fillText(`บันทึกเมื่อ: ${dateStr}`, 55, metaBaseY + 62);
+
+      // Right Side: 4 Elegant Metric Stat Badges
+      const statCardW = 105;
+      const statCardH = 68;
+      const statCards = [
+        { label: 'ระยะทาง', value: `${(metrics.distanceMeters / 1000).toFixed(2)}`, unit: 'km', color: '#3B664E' },
+        { label: 'เวลาวิ่ง', value: formatDuration(metrics.elapsedSeconds), unit: '', color: '#2C2621' },
+        { label: 'เพซเฉลี่ย', value: formatPace(metrics.speedKmh > 0.5 ? 60 / metrics.speedKmh : 0), unit: '/km', color: '#B67A28' },
+        { label: 'แคลอรี', value: `${metrics.caloriesBurned}`, unit: 'kcal', color: '#B85737' }
+      ];
+
+      const startStatX = 1200 - 55 - (statCards.length * (statCardW + 12));
+      statCards.forEach((c, idx) => {
+        const cx = startStatX + idx * (statCardW + 12);
+        const cy = metaBaseY;
+
+        pctx.fillStyle = '#FFFFFF';
+        pctx.beginPath();
+        pctx.roundRect(cx, cy, statCardW, statCardH, 12);
+        pctx.fill();
+
+        pctx.strokeStyle = '#EBE4DA';
+        pctx.lineWidth = 1.2;
+        pctx.stroke();
+
+        pctx.fillStyle = '#8C827A';
+        pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+        pctx.textAlign = 'center';
+        pctx.fillText(c.label, cx + statCardW / 2, cy + 18);
+
+        pctx.fillStyle = c.color;
+        pctx.font = 'bold 17px ui-monospace, monospace';
+        pctx.fillText(c.value, cx + statCardW / 2, cy + 40);
+
+        if (c.unit) {
+          pctx.fillStyle = '#A0958B';
+          pctx.font = '8px ui-sans-serif, system-ui, sans-serif';
+          pctx.fillText(c.unit, cx + statCardW / 2, cy + 54);
+        }
+      });
+
+      // Bottom Watermark
+      pctx.fillStyle = '#C2B7AA';
+      pctx.font = 'italic 10px ui-sans-serif, system-ui, sans-serif';
+      pctx.textAlign = 'right';
+      pctx.fillText('Treadmill Tracker — Scenic Journey Edition', 1140, 765);
+
+      // 5. Export and Trigger Download
+      postCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+        a.href = url;
+        a.download = `treadmill-postcard-${fileDate}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        setMilestoneToast('📸 บันทึกภาพโปสการ์ดความทรงจำสำเร็จแล้ว!');
+        setTimeout(() => setMilestoneToast(null), 4000);
+      }, 'image/png');
+    } catch (err) {
+      console.error('Failed to capture scenic postcard:', err);
+    } finally {
+      setIsCapturingPostcard(false);
+    }
+  };
 
   const handleSelectWeather = (w: ScenicWeather) => {
     setWeather(w);
@@ -209,6 +414,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     lastTime: number;
     celebrationTimer: number;
     lastWeather: ScenicWeather;
+    pacerDistance: number;
+    pacerCadencePhase: number;
     particles: Particle[];
     ripples: RainRipple[];
   }>({
@@ -223,6 +430,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     lastTime: 0,
     celebrationTimer: 0,
     lastWeather: 'clear',
+    pacerDistance: 0,
+    pacerCadencePhase: 0,
     particles: [],
     ripples: [],
   });
@@ -659,6 +868,21 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         }
       }
       const currentDistanceMeters = state.smoothDistance;
+
+      // Phase 4: Virtual Ghost Pacer Distance & Cadence
+      const pacerEnabled = pacerEnabledRef.current;
+      const pacerSpeed = pacerSpeedRef.current;
+      if (pacerEnabled && (isMoving || speed > 0.1)) {
+        state.pacerDistance += (pacerSpeed / 3.6) * dt;
+        const pacerCadence = 2.5 + (pacerSpeed - 6.0) * 0.12;
+        state.pacerCadencePhase += dt * pacerCadence * Math.PI * 2;
+        if (state.pacerCadencePhase > 20000 * Math.PI) state.pacerCadencePhase %= 2 * Math.PI;
+      }
+      const pacerDeltaMeters = state.smoothDistance - state.pacerDistance;
+
+      if (Math.floor(windTime * 4) !== Math.floor((windTime - dt) * 4)) {
+        setPacerDeltaDisplay(pacerDeltaMeters);
+      }
 
       // 2. Continuous Parallax Scrolling (Zero seams, zero hitching)
       const roadSpeed = isMoving ? speed * 22 : 0;
@@ -1671,6 +1895,67 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }
 
       // ==========================================
+      // PHASE 4: GHOST PACER RUNNER (Ethereal Virtual Companion)
+      // ==========================================
+      if (pacerEnabled && state.pacerDistance > 0) {
+        // Delta > 0: user is ahead, Ghost is behind
+        // Delta < 0: Ghost is ahead of user
+        // 1 meter = 4.5 pixels on screen relative to runner
+        const rawGhostX = runnerX - (pacerDeltaMeters * 4.5);
+        // Clamp ghost so it stays visible on screen with badge
+        const ghostX = Math.max(width * 0.08, Math.min(width * 0.88, rawGhostX));
+        const ghostRoadY = roadLeftY + (roadRightY - roadLeftY) * ((ghostX - (-20)) / (width + 40));
+        const ghostBounce = Math.abs(Math.sin(state.pacerCadencePhase)) * 6;
+        const ghostForwardLean = Math.min(0.20, 0.04 + pacerSpeed * 0.012);
+
+        // Ghost Drop Shadow
+        ctx.save();
+        ctx.translate(ghostX, ghostRoadY);
+        ctx.rotate(-inclineAngle);
+        ctx.fillStyle = 'rgba(40, 70, 90, 0.18)';
+        ctx.beginPath();
+        ctx.ellipse(0, 4, 18, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Ghost Runner Sprite with ethereal neon glow & cyan filter
+        ctx.save();
+        ctx.globalAlpha = 0.42;
+        ctx.filter = 'hue-rotate(185deg) brightness(1.35) drop-shadow(0 0 8px rgba(80, 220, 255, 0.85))';
+        ctx.translate(ghostX, ghostRoadY - ghostBounce);
+        ctx.rotate(-inclineAngle + ghostForwardLean);
+
+        const ghostFrame = Math.floor(state.pacerCadencePhase / (Math.PI / 2)) % 4;
+        if (assets.runnerRun) {
+          drawSprite(assets.runnerRun, 4, 4, ghostFrame, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
+        }
+        ctx.restore();
+
+        // Ghost Pacer Floating Badge
+        ctx.save();
+        const isLeading = pacerDeltaMeters >= 0;
+        ctx.fillStyle = isLeading ? 'rgba(82, 121, 111, 0.88)' : 'rgba(196, 104, 73, 0.88)';
+        const ghostBadgeW = 82;
+        const ghostBadgeH = 20;
+        const ghostBadgeY = ghostRoadY - 102;
+        ctx.beginPath();
+        ctx.roundRect(ghostX - ghostBadgeW / 2, ghostBadgeY, ghostBadgeW, ghostBadgeH, 10);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 9px ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const gapStr = Math.abs(pacerDeltaMeters) < 1 
+          ? 'ตีคู่' 
+          : isLeading 
+          ? `+${Math.round(pacerDeltaMeters)}m` 
+          : `-${Math.round(Math.abs(pacerDeltaMeters))}m`;
+        ctx.fillText(`👻 ${pacerSpeed.toFixed(1)}k ${gapStr}`, ghostX, ghostBadgeY + ghostBadgeH / 2);
+        ctx.restore();
+      }
+
+      // ==========================================
       // KINETIC SPEED WIND STREAKS (Phase 2)
       // Activated dynamically when speed >= 8.0 km/h
       // ==========================================
@@ -1898,6 +2183,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         className="absolute inset-0 w-full h-full block cursor-pointer"
         onClick={() => setZenMode(!zenMode)}
       />
+
+      {/* SHUTTER FLASH OVERLAY (Scenic Postcard) */}
+      {showShutterFlash && (
+        <div className="absolute inset-0 bg-white pointer-events-none z-50 animate-out fade-out duration-300" />
+      )}
 
       {/* TOP FLOATING CONTROL BAR */}
       <div className={`relative z-20 p-3 sm:p-4 flex items-center justify-between gap-2 transition-all duration-300 ${
@@ -2253,6 +2543,17 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
             )}
           </div>
 
+          {/* Postcard Capture Button (Phase 4) */}
+          <button
+            onClick={handleCapturePostcard}
+            disabled={isCapturingPostcard}
+            className="px-3 py-1.5 rounded-2xl bg-white/85 hover:bg-white text-[#C46849] font-semibold text-xs backdrop-blur-md border border-[#F6D8C6] transition-all cursor-pointer shadow-cozy-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+            title="บันทึกภาพโปสการ์ดความทรงจำ (Scenic Postcard)"
+          >
+            <Camera className="w-3.5 h-3.5 text-[#C46849]" />
+            <span className="hidden sm:inline">ถ่ายโปสการ์ด</span>
+          </button>
+
           {/* Switch to Giant HUD */}
           {onOpenGiantHud && (
             <button
@@ -2388,7 +2689,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         <div className="bg-white/85 backdrop-blur-md rounded-2xl px-3.5 py-2 sm:px-4 sm:py-2.5 border border-[#EDE6DC] shadow-cozy-sm pointer-events-auto">
           {/* Top Info Row */}
           <div className="flex items-center justify-between text-xs mb-1.5 font-bold text-[#2C2621]">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[#3B664E] text-xs sm:text-sm">🚩</span>
               <span className="text-[11px] sm:text-xs text-[#443830] font-bold">{targetKmLabel}</span>
               {metrics.inclineLevel > 0 && (
@@ -2397,6 +2698,43 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                   <span>ชัน +{metrics.inclineLevel} (+{(metrics.inclineLevel * 0.8).toFixed(1)}%)</span>
                 </span>
               )}
+
+              {/* Ghost Pacer Toggle & Speed Pill (Phase 4) */}
+              <div className="flex items-center gap-1.5 bg-[#FAF7F2] px-2 py-0.5 rounded-full border border-[#EDE6DC] text-[10px]">
+                <button
+                  onClick={handleTogglePacer}
+                  className={`flex items-center gap-1 font-bold cursor-pointer transition-all ${
+                    pacerEnabled ? 'text-[#1E6091]' : 'text-[#8C827A] hover:text-[#5A5047]'
+                  }`}
+                  title={pacerEnabled ? 'คลิกเพื่อปิด Ghost Pacer' : 'คลิกเพื่อเปิดวิ่งแข่งกับ Ghost Pacer'}
+                >
+                  <Ghost className="w-3 h-3 text-[#5DADE2]" />
+                  <span>{pacerEnabled ? `${pacerSpeed.toFixed(1)} km/h` : 'Pacer ปิด'}</span>
+                </button>
+                {pacerEnabled && (
+                  <div className="flex items-center gap-1 ml-1 border-l border-[#EDE6DC] pl-1 font-mono">
+                    <button 
+                      onClick={() => handleAdjustPacerSpeed(-0.5)} 
+                      className="w-4 h-4 flex items-center justify-center rounded bg-white hover:bg-[#EAE3D9] text-[#5A5047] font-bold cursor-pointer shadow-cozy-sm"
+                      title="ลดความเร็ว Pacer -0.5 km/h"
+                    >
+                      -
+                    </button>
+                    <button 
+                      onClick={() => handleAdjustPacerSpeed(0.5)} 
+                      className="w-4 h-4 flex items-center justify-center rounded bg-white hover:bg-[#EAE3D9] text-[#5A5047] font-bold cursor-pointer shadow-cozy-sm"
+                      title="เพิ่มความเร็ว Pacer +0.5 km/h"
+                    >
+                      +
+                    </button>
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                      pacerDeltaDisplay >= 0 ? 'text-[#2D6A4F] bg-[#D8F3DC]' : 'text-[#BC4749] bg-[#FDE2E4]'
+                    }`} title={pacerDeltaDisplay >= 0 ? 'คุณนำ Pacer อยู่' : 'คุณตามหลัง Pacer อยู่'}>
+                      {pacerDeltaDisplay >= 0 ? `+${Math.round(pacerDeltaDisplay)}m` : `${Math.round(pacerDeltaDisplay)}m`}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2 font-mono text-[11px] sm:text-xs text-[#3B664E]">
@@ -2446,6 +2784,17 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
               <span className="text-xs sm:text-sm">{activeProfile.avatar || '🏃‍♀️'}</span>
               {companionEmoji && <span className="text-[10px]">{companionEmoji}</span>}
             </div>
+
+            {/* Ghost Pacer Sliding Pin (Phase 4) */}
+            {pacerEnabled && (
+              <div 
+                className="absolute -top-3.5 sm:-top-4 -translate-x-1/2 flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#EBF5FB] border-2 border-[#5DADE2] shadow-cozy transition-all duration-300 pointer-events-none z-15"
+                style={{ left: `${Math.min(100, Math.max(0, ((animStateRef.current.pacerDistance / 1000) / targetKm) * 100))}%` }}
+                title={`Ghost Pacer (${pacerSpeed.toFixed(1)} km/h)`}
+              >
+                <span className="text-xs">👻</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
