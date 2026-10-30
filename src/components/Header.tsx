@@ -16,6 +16,7 @@ interface HeaderProps {
   onOpenHistory: () => void;
   onResetSession: () => void;
   onOpenGiantHud: () => void;
+  onOpenScenicView: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,7 +32,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWorkouts,
   onOpenHistory,
   onResetSession,
-  onOpenGiantHud
+  onOpenGiantHud,
+  onOpenScenicView
 }) => {
   return (
     <header className="border-b border-[#EBE4D8] bg-[#FAF7F2]/90 backdrop-blur-md sticky top-0 z-40 px-4 py-3 sm:px-6">
@@ -118,6 +120,16 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <History className="w-3.5 h-3.5 text-[#52796F]" />
             <span>ประวัติ & สถิติ</span>
+          </button>
+
+          {/* Scenic Walk Animation View Toggle */}
+          <button
+            onClick={onOpenScenicView}
+            className="px-3 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 bg-[#FDF0EC] hover:bg-[#F9E2DA] text-[#C46849] border border-[#F6D5C9] transition-all cursor-pointer shadow-cozy-sm active:scale-95"
+            title="เปิดวิววิ่งธรรมชาติสุดชิลล์ เพลินตา (Scenic Journey)"
+          >
+            <span className="text-sm leading-none">🌸</span>
+            <span>วิววิ่งเพลินๆ</span>
           </button>
 
           {/* Giant Running HUD Toggle */}

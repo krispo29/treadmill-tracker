@@ -26,6 +26,7 @@ interface GiantRunningHudProps {
   onSetIncline: (incline: number) => void;
   onStart: (speed?: number) => void;
   onStop: () => void;
+  onOpenScenicView?: () => void;
   deviceName: string;
 }
 
@@ -40,6 +41,7 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
   onSetIncline,
   onStart,
   onStop,
+  onOpenScenicView,
   deviceName
 }) => {
   const defaultStartingSpeed = activeProfile?.defaultStartSpeed ?? 3.0;
@@ -179,6 +181,21 @@ export const GiantRunningHud: React.FC<GiantRunningHudProps> = ({
           >
             {soundOn ? <Volume2 className="w-5 h-5 text-[#52796F]" /> : <VolumeX className="w-5 h-5 text-[#8C827A]" />}
           </button>
+
+          {/* Switch to Scenic Animation View */}
+          {onOpenScenicView && (
+            <button
+              onClick={() => {
+                onClose();
+                onOpenScenicView();
+              }}
+              className="px-3.5 py-2 rounded-2xl bg-[#FDF0EC] hover:bg-[#F9E2DA] text-[#C46849] border border-[#F6D5C9] flex items-center gap-1.5 text-xs font-semibold cursor-pointer active:scale-95 transition-all shadow-cozy-sm"
+              title="เปิดวิววิ่งธรรมชาติสุดชิลล์ (Scenic View)"
+            >
+              <span>🌸</span>
+              <span className="hidden sm:inline">วิววิ่งเพลินๆ</span>
+            </button>
+          )}
 
           <button
             onClick={onClose}

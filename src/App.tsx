@@ -46,6 +46,7 @@ import { NeonSettingsModal } from './components/NeonSettingsModal';
 import { ProfileManagerModal } from './components/ProfileManagerModal';
 import { DiagnosticDrawer } from './components/DiagnosticDrawer';
 import { GiantRunningHud } from './components/GiantRunningHud';
+import { ScenicJourneyModal } from './components/ScenicJourneyModal';
 import { WorkoutRecapModal } from './components/WorkoutRecapModal';
 
 export const App: React.FC = () => {
@@ -72,6 +73,7 @@ export const App: React.FC = () => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isNeonModalOpen, setIsNeonModalOpen] = useState(false);
   const [isGiantHudOpen, setIsGiantHudOpen] = useState(false);
+  const [isScenicModalOpen, setIsScenicModalOpen] = useState(false);
   const [isRecapModalOpen, setIsRecapModalOpen] = useState(false);
   const [latestSavedRecord, setLatestSavedRecord] = useState<WorkoutRecord | null>(null);
   const [compactMode, setCompactMode] = useState(false);
@@ -503,6 +505,7 @@ export const App: React.FC = () => {
     setLatestSavedRecord(record);
     setIsRecapModalOpen(true);
     setIsGiantHudOpen(false); // Close giant HUD so recap modal takes full focus
+    setIsScenicModalOpen(false);
 
     const distKm = (metrics.distanceMeters / 1000).toFixed(2);
     const timeFormatted = formatDuration(metrics.elapsedSeconds);
@@ -544,6 +547,7 @@ export const App: React.FC = () => {
         onOpenHistory={() => setIsHistoryModalOpen(true)}
         onResetSession={handleResetSession}
         onOpenGiantHud={() => setIsGiantHudOpen(true)}
+        onOpenScenicView={() => setIsScenicModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -812,16 +816,29 @@ export const App: React.FC = () => {
         onClose={() => setIsNeonModalOpen(false)}
       />
 
-      {/* Floating 1-Tap Giant HUD Launcher Button */}
-      {!isGiantHudOpen && (
-        <button
-          onClick={() => setIsGiantHudOpen(true)}
-          className="fixed bottom-6 right-6 z-30 px-5 py-3.5 rounded-2xl bg-[#52796F] hover:bg-[#43675E] text-white font-bold text-xs sm:text-sm flex items-center gap-2.5 shadow-cozy-lg border border-[#A8CCA8] cursor-pointer active:scale-95 transition-all"
-          title="เปิดหน้าจอวิ่งขนาดยักษ์ มองชัด 1 เมตร"
-        >
-          <Maximize2 className="w-4 h-4" />
-          <span>📺 จอวิ่งยักษ์ (Giant HUD)</span>
-        </button>
+      {/* Floating 1-Tap Giant HUD & Scenic View Launcher Buttons */}
+      {!isGiantHudOpen && !isScenicModalOpen && (
+        <div className="fixed bottom-6 right-6 z-30 flex items-center gap-2">
+          {/* Scenic View Launcher */}
+          <button
+            onClick={() => setIsScenicModalOpen(true)}
+            className="px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl bg-[#C46849] hover:bg-[#B3593B] text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-cozy-lg border border-[#E8A58D] cursor-pointer active:scale-95 transition-all"
+            title="เปิดวิววิ่งธรรมชาติสุดชิลล์ ดูเพลินๆ"
+          >
+            <span className="text-base leading-none">🌸</span>
+            <span>วิววิ่งเพลินๆ</span>
+          </button>
+
+          {/* Giant HUD Launcher */}
+          <button
+            onClick={() => setIsGiantHudOpen(true)}
+            className="px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl bg-[#52796F] hover:bg-[#43675E] text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-cozy-lg border border-[#A8CCA8] cursor-pointer active:scale-95 transition-all"
+            title="เปิดหน้าจอวิ่งขนาดยักษ์ มองชัด 1 เมตร"
+          >
+            <Maximize2 className="w-4 h-4" />
+            <span>📺 จอวิ่งยักษ์</span>
+          </button>
+        </div>
       )}
 
       {/* Giant Running HUD Fullscreen Cockpit with Household Switcher & Favorites (Phase 2) */}
@@ -836,6 +853,21 @@ export const App: React.FC = () => {
         onSetIncline={handleSetIncline}
         onStart={handleStartTreadmill}
         onStop={handleStopTreadmill}
+        onOpenScenicView={() => setIsScenicModalOpen(true)}
+        deviceName={deviceName}
+      />
+
+      {/* Scenic Animated Journey View (Interactive Scenic Run with Avatar & Companions) */}
+      <ScenicJourneyModal
+        isOpen={isScenicModalOpen}
+        onClose={() => setIsScenicModalOpen(false)}
+        metrics={metrics}
+        activeProfile={activeProfile}
+        onSetSpeed={handleSetSpeed}
+        onSetIncline={handleSetIncline}
+        onStart={handleStartTreadmill}
+        onStop={handleStopTreadmill}
+        onOpenGiantHud={() => setIsGiantHudOpen(true)}
         deviceName={deviceName}
       />
 
