@@ -499,7 +499,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.fill();
 
         if (assets.bgMoonCrescent) {
-          drawSprite(assets.bgMoonCrescent, 4, 4, 0, 0, moonX - 35, moonY - 35, 70, 70);
+          // PixelLab moon is an 8x8 sheet of 32x32 cells (cell 0,0 is a single crisp golden crescent moon)
+          drawSprite(assets.bgMoonCrescent, 8, 8, 0, 0, moonX - 28, moonY - 28, 56, 56);
         } else {
           ctx.fillStyle = '#FFF8D6';
           ctx.beginPath();
@@ -604,49 +605,22 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.fillStyle = farMountainBaseColor;
       ctx.fillRect(-50, mountainY, width + 100, height - mountainY);
 
-      if (assets.bgMountains) {
-        // Seamless Distant Mountains Layer (1536x384 strip)
-        const mDrawW = 1000;
-        const mDrawH = 250;
-        const startX = -((farScroll * 0.6) % mDrawW);
-        ctx.save();
-        if (theme === 'night') ctx.globalAlpha = 0.65;
-        else if (theme === 'sunset') ctx.globalAlpha = 0.88;
-        for (let mx = startX - mDrawW; mx < width + mDrawW; mx += mDrawW) {
-          ctx.drawImage(assets.bgMountains, mx, mountainY - 145, mDrawW, mDrawH);
-        }
-        ctx.restore();
-      } else {
-        // Procedural mountain fallback
-        ctx.fillStyle = farMountainBaseColor;
-        ctx.beginPath();
-        ctx.moveTo(-50, height);
-        for (let x = -50; x <= width + 100; x += 30) {
-          const peak = Math.sin((x + farScroll * 0.4) * 0.003) * 65 
-                     + Math.cos((x + farScroll * 0.4) * 0.007) * 35;
-          ctx.lineTo(x, mountainY - 20 - peak);
-        }
-        ctx.lineTo(width + 100, height);
-        ctx.closePath();
-        ctx.fill();
-      }
-
-      // Sacred Mount Fuji (Iconic Majestic Snow Peak in Sakura / Sunset / Night)
+      // A. Sacred Mount Fuji (Renders in background BEHIND distant mountains & rolling hills)
       if (theme === 'sakura' || theme === 'sunset' || theme === 'night') {
-        const fujiX = ((width * 0.42 - farScroll * 0.6) % (width + 500) + width + 500) % (width + 500) - 150;
+        const fujiX = ((width * 0.42 - farScroll * 0.4) % (width + 500) + width + 500) % (width + 500) - 150;
         const fujiBaseY = height * 0.68;
 
         if (assets.bgFuji) {
-          // Dedicated high-res pixel art Mount Fuji (512x512 single isolated asset)
-          // Peak is at Y=169, Base at Y=511 (Total height 342 in 512px space)
-          const fujiDrawW = 340;
-          const fujiDrawH = 340;
+          // Dedicated high-res pixel art Mount Fuji
+          // Positioned deeper in the background so its sides are tucked naturally behind mountains
+          const fujiDrawW = 380;
+          const fujiDrawH = 380;
           const fujiDrawX = fujiX - fujiDrawW / 2;
-          const fujiDrawY = fujiBaseY - fujiDrawH + 12; // Base grounded nicely behind rolling hills
+          const fujiDrawY = fujiBaseY - fujiDrawH + 75; // Lowered so side cutoffs are hidden below mountain ridges
 
           ctx.save();
           if (theme === 'night') {
-            ctx.globalAlpha = 0.75;
+            ctx.globalAlpha = 0.85;
           } else if (theme === 'sunset') {
             ctx.globalAlpha = 0.95;
           }
@@ -694,6 +668,34 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         }
       }
 
+      // B. Distant Mountain Ridge Layer (Seamless 1536x384 parallax strip in front of Fuji)
+      if (assets.bgMountains) {
+        const mDrawW = 1000;
+        const mDrawH = 250;
+        const startX = -((farScroll * 0.6) % mDrawW);
+        ctx.save();
+        if (theme === 'night') ctx.globalAlpha = 0.85;
+        else if (theme === 'sunset') ctx.globalAlpha = 0.92;
+        // Overlap by 1px to guarantee zero seam gap
+        for (let mx = startX - mDrawW; mx < width + mDrawW; mx += mDrawW - 1) {
+          ctx.drawImage(assets.bgMountains, mx, mountainY - 145, mDrawW, mDrawH);
+        }
+        ctx.restore();
+      } else {
+        // Procedural mountain fallback
+        ctx.fillStyle = farMountainBaseColor;
+        ctx.beginPath();
+        ctx.moveTo(-50, height);
+        for (let x = -50; x <= width + 100; x += 30) {
+          const peak = Math.sin((x + farScroll * 0.4) * 0.003) * 65 
+                     + Math.cos((x + farScroll * 0.4) * 0.007) * 35;
+          ctx.lineTo(x, mountainY - 20 - peak);
+        }
+        ctx.lineTo(width + 100, height);
+        ctx.closePath();
+        ctx.fill();
+      }
+
       // ------------------------------------------
       // 5. MID-GROUND ROLLING GREEN HILLS & MEADOW
       // ------------------------------------------
@@ -718,7 +720,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.save();
         if (theme === 'night') ctx.globalAlpha = 0.7;
         else if (theme === 'sunset') ctx.globalAlpha = 0.9;
-        for (let hx = startHX - hDrawW; hx < width + hDrawW; hx += hDrawW) {
+        // Overlap by 1px to guarantee zero seam gap
+        for (let hx = startHX - hDrawW; hx < width + hDrawW; hx += hDrawW - 1) {
           ctx.drawImage(assets.bgHills, hx, midHillY - 108, hDrawW, hDrawH);
         }
         ctx.restore();
