@@ -19,12 +19,22 @@ import {
   Clock,
   Music,
   Camera,
-  Ghost
+  Ghost,
+  Trophy
 } from 'lucide-react';
 import type { TreadmillMetrics, UserProfile, WorkoutGoal } from '../types/treadmill';
 import { formatDuration, formatPace } from '../services/calculations';
 import { audioCoach } from '../services/audioCoach';
 import { scenicAudioEngine } from '../services/scenicAudioEngine';
+import {
+  ACHIEVEMENT_CATALOG,
+  getUnlockedAchievementIds,
+  saveUnlockedAchievementId,
+  playSteamAchievementChime,
+  getFoodsBurned,
+  type AchievementItem
+} from '../services/scenicAchievements';
+import { ScenicAchievementToast } from './ScenicAchievementToast';
 
 export type ScenicTheme = 'sakura' | 'countryside' | 'sunset' | 'night';
 export type ScenicWeather = 'clear' | 'rain' | 'mist' | 'autumn';
@@ -195,6 +205,17 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const [isCapturingPostcard, setIsCapturingPostcard] = useState<boolean>(false);
   const [showShutterFlash, setShowShutterFlash] = useState<boolean>(false);
 
+  // Phase 1: Steam-Style Achievement Engine State & Queue
+  const [achievementQueue, setAchievementQueue] = useState<AchievementItem[]>([]);
+  const unlockedInSessionRef = useRef<Set<string>>(new Set());
+  const [unlockedCount, setUnlockedCount] = useState<number>(() => getUnlockedAchievementIds().length);
+  const maxSpeedReachedRef = useRef<number>(0);
+  const hasCapturedPostcardRef = useRef<boolean>(false);
+
+  const handleDismissAchievement = (id: string) => {
+    setAchievementQueue((prev) => prev.filter((item) => item.id !== id));
+  };
+
   const pacerEnabledRef = useRef(pacerEnabled);
   const pacerSpeedRef = useRef(pacerSpeed);
 
@@ -237,6 +258,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     if (!canvas || isCapturingPostcard) return;
 
     setIsCapturingPostcard(true);
+    hasCapturedPostcardRef.current = true;
     setShowShutterFlash(true);
     setTimeout(() => setShowShutterFlash(false), 320);
 
@@ -657,6 +679,58 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       return () => clearTimeout(timer);
     }
   }, [metrics.distanceMeters, soundEnabled]);
+
+  // Phase 1: Real-time Steam-Style Achievement Unlock Engine
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (metrics.speedKmh > maxSpeedReachedRef.current) {
+      maxSpeedReachedRef.current = metrics.speedKmh;
+    }
+
+    const sessionState = {
+      pacerDeltaMeters: pacerDeltaDisplay,
+      pacerEnabled: pacerEnabled,
+      weather: weather,
+      isZenMode: zenMode,
+      hasCapturedPostcard: hasCapturedPostcardRef.current,
+      maxSpeedKmh: maxSpeedReachedRef.current,
+    };
+
+    const newlyUnlocked: AchievementItem[] = [];
+
+    for (const ach of ACHIEVEMENT_CATALOG) {
+      if (unlockedInSessionRef.current.has(ach.id)) continue;
+
+      try {
+        if (ach.checkUnlock(metrics, sessionState)) {
+          unlockedInSessionRef.current.add(ach.id);
+          saveUnlockedAchievementId(ach.id);
+          newlyUnlocked.push(ach);
+        }
+      } catch (err) {
+        console.error('Error checking achievement:', ach.id, err);
+      }
+    }
+
+    if (newlyUnlocked.length > 0) {
+      setAchievementQueue((prev) => [...prev, ...newlyUnlocked]);
+      setUnlockedCount(getUnlockedAchievementIds().length);
+
+      // Trigger signature Steam double bell chime!
+      if (soundEnabled) {
+        playSteamAchievementChime(ambientAudioCtxRef.current);
+      }
+    }
+  }, [
+    metrics,
+    pacerDeltaDisplay,
+    pacerEnabled,
+    weather,
+    zenMode,
+    isOpen,
+    soundEnabled
+  ]);
 
   // Soft footstep sound synthesis synchronized with runner cadence
   const playFootstepTone = () => {
@@ -2545,6 +2619,16 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
             )}
           </div>
 
+          {/* Steam-Style Achievement Trophy Counter (Phase 1) */}
+          <div
+            className="px-2.5 py-1.5 rounded-2xl bg-white/85 hover:bg-white text-[#B7950B] font-semibold text-xs backdrop-blur-md border border-[#F9E79F] transition-all shadow-cozy-sm flex items-center gap-1.5"
+            title={`ปลดล็อกความสำเร็จแล้ว ${unlockedCount} จาก ${ACHIEVEMENT_CATALOG.length} รายการ`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-[#F5BA42]" />
+            <span className="font-mono text-[11px] font-bold text-[#8D6E63] hidden sm:inline">ความสำเร็จ</span>
+            <span className="font-mono text-[11px] font-black text-[#B7950B]">{unlockedCount}/{ACHIEVEMENT_CATALOG.length}</span>
+          </div>
+
           {/* Postcard Capture Button (Phase 4) */}
           <button
             onClick={handleCapturePostcard}
@@ -2737,6 +2821,20 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Food Calorie Burn Pill (Phase 1) */}
+              {(() => {
+                const foods = getFoodsBurned(metrics.caloriesBurned);
+                if (foods.length === 0) return null;
+                return (
+                  <div className="flex items-center gap-1 bg-[#FEF9E7] border border-[#F9E79F] px-2 py-0.5 rounded-full text-[10px] text-[#7D6608] font-bold shadow-cozy-sm" title="อาหารที่คุณวิ่งเบิร์นหมดไปแล้วในเซสชันนี้">
+                    <span>🔥 เบิร์นแล้ว:</span>
+                    <span className="font-semibold text-[#B7950B]">
+                      {foods.slice(0, 3).map((f) => `${f.item.emoji} x${f.count}`).join(' ')}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex items-center gap-2 font-mono text-[11px] sm:text-xs text-[#3B664E]">
@@ -2911,6 +3009,12 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
         </div>
       </div>
+
+      {/* STEAM-STYLE ACHIEVEMENT TOAST NOTIFICATION (Phase 1) */}
+      <ScenicAchievementToast
+        queue={achievementQueue}
+        onDismiss={handleDismissAchievement}
+      />
     </div>
   );
 };
