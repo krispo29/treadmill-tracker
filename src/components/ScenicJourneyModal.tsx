@@ -1571,8 +1571,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.save();
         ctx.translate(runnerX, runnerRoadY - verticalBounce);
         ctx.rotate(-inclineAngle);
-        // Row 0 has 4 gentle idle breathing frames
-        const idleFrame = Math.floor(windTime * 2) % 4;
+        // Fixed calm standing pose (col 0) instead of cycling through multiple avatar variants
+        const idleFrame = 0;
         drawSprite(assets.runnerIdle, 4, 4, idleFrame, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
         ctx.restore();
       } else {
@@ -1724,19 +1724,21 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         // Pet sprite size (scaled to cute companion size ~44x44)
         const petDrawSize = 44;
         const petGroundDy = -petDrawSize * (27 / 32); // Feet on ground
-        const petFrame = isMoving 
-          ? Math.floor(companionPhase / (Math.PI / 2)) % 4 
-          : Math.floor(windTime * 2) % 4;
+        // When running, cycle 4 run frames (0..3). When idle, hold a calm standing/sitting pose.
+        const petRunFrame = Math.floor(companionPhase / (Math.PI / 2)) % 4;
+        const petShibaCol = isMoving ? petRunFrame : 4;
+        const petCatCol = isMoving ? petRunFrame : 0;
+        const petBunnyCol = isMoving ? petRunFrame : 4;
 
         if (companion === 'shiba' && assets.petShiba) {
-          // Pixel Art Shiba Inu (8x8 grid of 32x32 cells, row 0 has run cycle)
-          drawSprite(assets.petShiba, 8, 8, petFrame, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+          // Pixel Art Shiba Inu (8x8 grid of 32x32 cells, col 4 has standing pose, cols 0-3 run)
+          drawSprite(assets.petShiba, 8, 8, petShibaCol, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
         } else if (companion === 'cat' && assets.petCat) {
-          // Pixel Art Cat (8x8 grid of 32x32 cells, row 0 has trot cycle)
-          drawSprite(assets.petCat, 8, 8, petFrame, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+          // Pixel Art Cat (8x8 grid of 32x32 cells, col 0 has standing pose, cols 0-3 run)
+          drawSprite(assets.petCat, 8, 8, petCatCol, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
         } else if (companion === 'bunny' && assets.petBunny) {
-          // Pixel Art Bunny (8x8 grid of 32x32 cells, row 0 has hop cycle)
-          drawSprite(assets.petBunny, 8, 8, petFrame, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+          // Pixel Art Bunny (8x8 grid of 32x32 cells, col 4 has sitting pose, cols 0-3 hop)
+          drawSprite(assets.petBunny, 8, 8, petBunnyCol, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
         } else if (companion === 'shiba') {
           // SHIBA INU (Golden-tan, curled tail, pointy ears - fallback)
           const shibaGold = '#DE8C3B';
