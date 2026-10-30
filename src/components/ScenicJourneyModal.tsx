@@ -23,6 +23,7 @@ import { formatDuration, formatPace } from '../services/calculations';
 import { audioCoach } from '../services/audioCoach';
 
 export type ScenicTheme = 'sakura' | 'countryside' | 'sunset' | 'night';
+export type ScenicWeather = 'clear' | 'rain' | 'mist' | 'autumn';
 export type CompanionType = 'shiba' | 'cat' | 'bunny' | 'none';
 
 /**
@@ -82,6 +83,15 @@ interface Particle {
   rotSpeed: number;
   alpha: number;
   color: string;
+  type?: 'default' | 'rain' | 'autumn';
+}
+
+interface RainRipple {
+  x: number;
+  y: number;
+  r: number;
+  maxR: number;
+  alpha: number;
 }
 
 export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
@@ -110,6 +120,15 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const theme: ScenicTheme = isAutoTheme ? getThemeForCurrentTime(currentTime) : manualTheme;
 
   const [companion, setCompanion] = useState<CompanionType>('shiba');
+  const [weather, setWeather] = useState<ScenicWeather>(() => {
+    try {
+      const saved = localStorage.getItem('scenic_journey_weather');
+      if (saved === 'clear' || saved === 'rain' || saved === 'mist' || saved === 'autumn') {
+        return saved as ScenicWeather;
+      }
+    } catch {}
+    return 'clear';
+  });
   const [zenMode, setZenMode] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -118,6 +137,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const metricsRef = useRef(metrics);
   const themeRef = useRef(theme);
   const companionRef = useRef(companion);
+  const weatherRef = useRef(weather);
   const soundEnabledRef = useRef(soundEnabled);
 
   // Synchronize refs safely in effect
@@ -125,8 +145,16 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     metricsRef.current = metrics;
     themeRef.current = theme;
     companionRef.current = companion;
+    weatherRef.current = weather;
     soundEnabledRef.current = soundEnabled;
   });
+
+  const handleSelectWeather = (w: ScenicWeather) => {
+    setWeather(w);
+    try {
+      localStorage.setItem('scenic_journey_weather', w);
+    } catch {}
+  };
 
   // Persistent Canvas Animation State (Never restarts or jumps when metrics/theme update)
   const animStateRef = useRef<{
@@ -140,7 +168,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     smoothDistance: number;
     lastTime: number;
     celebrationTimer: number;
+    lastWeather: ScenicWeather;
     particles: Particle[];
+    ripples: RainRipple[];
   }>({
     groundScroll: 0,
     midScroll: 0,
@@ -152,7 +182,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     smoothDistance: metrics.distanceMeters || 0,
     lastTime: 0,
     celebrationTimer: 0,
+    lastWeather: 'clear',
     particles: [],
+    ripples: [],
   });
 
   // Update clock every 10 seconds to auto-transition time periods smoothly
@@ -419,14 +451,52 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     let animationFrameId: number;
     animStateRef.current.lastTime = performance.now();
 
-    const getParticleColor = (curTheme: string) => {
+    const getParticleColor = (curTheme: string, curWeather: ScenicWeather) => {
+      if (curWeather === 'autumn') {
+        const autumnColors = ['#D32F2F', '#E64A19', '#F57C00', '#FFA000', '#C2185B', '#8D6E63'];
+        return autumnColors[Math.floor(Math.random() * autumnColors.length)];
+      }
+      if (curWeather === 'rain') {
+        return curTheme === 'night' ? 'rgba(165, 205, 240, 0.65)' : 'rgba(140, 195, 235, 0.7)';
+      }
+      if (curWeather === 'mist') {
+        return 'rgba(255, 255, 255, 0.25)';
+      }
       if (curTheme === 'countryside') return Math.random() > 0.5 ? 'rgba(235, 179, 90, 0.7)' : 'rgba(168, 204, 168, 0.7)';
       if (curTheme === 'sunset') return 'rgba(255, 214, 165, 0.75)';
       if (curTheme === 'night') return 'rgba(255, 245, 157, 0.85)'; // Firefly glow
       return 'rgba(255, 183, 197, 0.7)'; // Sakura pink
     };
 
-    const createParticle = (width: number, height: number, curTheme: string): Particle => {
+    const createParticle = (width: number, height: number, curTheme: string, curWeather: ScenicWeather): Particle => {
+      if (curWeather === 'rain') {
+        return {
+          x: Math.random() * (width + 150),
+          y: Math.random() * height,
+          vx: -(2.5 + Math.random() * 2.5),
+          vy: 14 + Math.random() * 8,
+          size: 14 + Math.random() * 12,
+          rotation: 0,
+          rotSpeed: 0,
+          alpha: 0.35 + Math.random() * 0.45,
+          color: getParticleColor(curTheme, curWeather),
+          type: 'rain',
+        };
+      }
+      if (curWeather === 'autumn') {
+        return {
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: -(1.8 + Math.random() * 2.8),
+          vy: 0.8 + Math.random() * 1.5,
+          size: 6 + Math.random() * 6,
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.08,
+          alpha: 0.6 + Math.random() * 0.4,
+          color: getParticleColor(curTheme, curWeather),
+          type: 'autumn',
+        };
+      }
       return {
         x: Math.random() * width,
         y: Math.random() * height,
@@ -436,7 +506,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         rotation: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() - 0.5) * 0.06,
         alpha: 0.3 + Math.random() * 0.7,
-        color: getParticleColor(curTheme)
+        color: getParticleColor(curTheme, curWeather),
+        type: 'default',
       };
     };
 
@@ -455,10 +526,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // Re-seed particles to screen boundaries if empty
       const state = animStateRef.current;
       const curTheme = themeRef.current;
-      const maxParticles = curTheme === 'night' ? 70 : 45;
+      const curWeather = weatherRef.current;
+      const maxParticles = curWeather === 'rain' ? 85 : curWeather === 'autumn' ? 55 : (curTheme === 'night' ? 70 : 45);
       if (state.particles.length === 0) {
         for (let i = 0; i < maxParticles; i++) {
-          state.particles.push(createParticle(width, height, curTheme));
+          state.particles.push(createParticle(width, height, curTheme, curWeather));
         }
       }
     };
@@ -513,9 +585,20 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         state.celebrationTimer = Math.max(0, state.celebrationTimer - dt);
       }
       const isCelebrating = state.celebrationTimer > 0;
-
       const width = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
       const height = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+      const curWeather = weatherRef.current;
+
+      // Re-seed particles if weather mode switched
+      if (state.lastWeather !== curWeather) {
+        state.lastWeather = curWeather;
+        state.particles = [];
+        const maxParticles = curWeather === 'rain' ? 85 : curWeather === 'autumn' ? 55 : (theme === 'night' ? 70 : 45);
+        for (let i = 0; i < maxParticles; i++) {
+          state.particles.push(createParticle(width, height, theme, curWeather));
+        }
+      }
+
       const assets = assetsRef.current;
       ctx.imageSmoothingEnabled = false;
 
@@ -608,15 +691,29 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // 2. CELESTIAL BODY (Sun / Moon / Stars)
       // ------------------------------------------
       if (theme === 'night') {
-        // Twinkling Stars
-        for (let i = 0; i < 40; i++) {
-          const starX = (i * 37) % width;
-          const starY = (i * 23) % (height * 0.45);
-          const starAlpha = 0.3 + 0.6 * Math.sin(windTime * 2 + i);
+        // Multi-tier Twinkling Stars & Cross-Sparkle Stars (Phase 2)
+        for (let i = 0; i < 50; i++) {
+          const starX = ((i * 73 + 29) % 1000) * (width / 1000);
+          const starY = ((i * 47 + 13) % 400) * ((height * 0.48) / 400);
+          const twinkleFreq = 1.4 + (i % 5) * 0.7;
+          const starAlpha = 0.25 + 0.65 * Math.abs(Math.sin(windTime * twinkleFreq + i * 1.7));
+          
           ctx.fillStyle = `rgba(255, 255, 255, ${starAlpha})`;
           ctx.beginPath();
-          ctx.arc(starX, starY, (i % 3 === 0 ? 1.8 : 1.2), 0, Math.PI * 2);
+          ctx.arc(starX, starY, (i % 4 === 0 ? 1.8 : 1.1), 0, Math.PI * 2);
           ctx.fill();
+
+          // Special 4-point diamond sparkles for brightest stars
+          if (i % 7 === 0 && starAlpha > 0.6) {
+            ctx.save();
+            ctx.strokeStyle = `rgba(215, 235, 255, ${starAlpha * 0.75})`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(starX - 4, starY); ctx.lineTo(starX + 4, starY);
+            ctx.moveTo(starX, starY - 4); ctx.lineTo(starX, starY + 4);
+            ctx.stroke();
+            ctx.restore();
+          }
         }
         // Glowing Crescent Moon
         const moonX = width * 0.82;
@@ -754,6 +851,29 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         }
         // Keep 100% solid opacity so no ghosting occurs behind mountains
         ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
+
+        // Phase 2: Diamond Shimmer on Mount Fuji's Snowy Summit
+        const shimmerT = (windTime * 1.2) % 7.0;
+        if (shimmerT < 1.0) {
+          const sProgress = shimmerT / 1.0;
+          const sAlpha = Math.sin(sProgress * Math.PI) * (theme === 'night' ? 0.7 : 0.95);
+          const sX = fujiDrawX + fujiDrawW * 0.48;
+          const sY = fujiDrawY + fujiDrawH * 0.22;
+          ctx.save();
+          ctx.fillStyle = theme === 'night' ? `rgba(200, 230, 255, ${sAlpha})` : `rgba(255, 255, 255, ${sAlpha})`;
+          ctx.beginPath();
+          ctx.arc(sX, sY, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          // 4-point sparkle cross
+          ctx.strokeStyle = theme === 'night' ? `rgba(200, 230, 255, ${sAlpha * 0.8})` : `rgba(255, 255, 255, ${sAlpha * 0.8})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(sX - 7, sY); ctx.lineTo(sX + 7, sY);
+          ctx.moveTo(sX, sY - 7); ctx.lineTo(sX, sY + 7);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         ctx.restore();
       } else {
         // Procedural fallback Fuji
@@ -828,6 +948,26 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.fill();
       }
 
+      // Phase 2: Rolling Mountain Mist Wave (when weather === 'mist')
+      if (curWeather === 'mist') {
+        ctx.save();
+        const mistGrad = ctx.createLinearGradient(0, mountainY - 50, 0, mountainY + 70);
+        mistGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        mistGrad.addColorStop(0.5, theme === 'night' ? 'rgba(180, 205, 230, 0.16)' : 'rgba(255, 255, 255, 0.25)');
+        mistGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = mistGrad;
+        ctx.beginPath();
+        ctx.moveTo(-50, mountainY + 80);
+        for (let mx = -50; mx <= width + 50; mx += 35) {
+          const my = mountainY - 20 + Math.sin((mx + windTime * 22) * 0.006) * 16;
+          ctx.lineTo(mx, my);
+        }
+        ctx.lineTo(width + 50, mountainY + 80);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
       // ------------------------------------------
       // 5. MID-GROUND ROLLING GREEN HILLS & MEADOW
       // ------------------------------------------
@@ -873,6 +1013,26 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.lineTo(width + 100, height);
         ctx.closePath();
         ctx.fill();
+      }
+
+      // Phase 2: Low Meadow Ground Mist (when weather === 'mist')
+      if (curWeather === 'mist') {
+        ctx.save();
+        const meadowMistGrad = ctx.createLinearGradient(0, midHillY - 30, 0, midHillY + 65);
+        meadowMistGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        meadowMistGrad.addColorStop(0.5, theme === 'night' ? 'rgba(175, 200, 225, 0.14)' : 'rgba(255, 255, 255, 0.22)');
+        meadowMistGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = meadowMistGrad;
+        ctx.beginPath();
+        ctx.moveTo(-50, midHillY + 70);
+        for (let mx = -50; mx <= width + 50; mx += 35) {
+          const my = midHillY - 10 + Math.cos((mx + windTime * 35) * 0.008) * 14;
+          ctx.lineTo(mx, my);
+        }
+        ctx.lineTo(width + 50, midHillY + 70);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
       }
 
       // Windmill or Cozy House in Countryside
@@ -994,6 +1154,26 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.lineTo(width + 20, roadRightY + 22);
       ctx.stroke();
       ctx.setLineDash([]); // Reset dash
+
+      // Phase 2: Animated Water Puddle Ripples on Road (in Rain Weather)
+      if (curWeather === 'rain' && state.ripples.length > 0) {
+        ctx.save();
+        state.ripples.forEach((r) => {
+          r.r += 0.75;
+          r.alpha -= 0.035;
+          if (r.alpha > 0) {
+            ctx.strokeStyle = theme === 'night' 
+              ? `rgba(180, 215, 245, ${r.alpha * 0.45})` 
+              : `rgba(215, 235, 255, ${r.alpha * 0.6})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.ellipse(r.x, r.y, r.r, r.r * 0.35, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        });
+        state.ripples = state.ripples.filter((r) => r.alpha > 0);
+        ctx.restore();
+      }
 
       // Milestone Distance Posts along the trail (Smooth continuous 60 FPS gliding)
       const markerIntervalM = 250; // every 250m
@@ -1450,8 +1630,44 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.restore();
       }
 
+      // ==========================================
+      // KINETIC SPEED WIND STREAKS (Phase 2)
+      // Activated dynamically when speed >= 8.0 km/h
+      // ==========================================
+      if (speed >= 8.0) {
+        const streakCount = speed >= 11.0 ? 12 : 7;
+        const streakSpeed = 420 + (speed - 8.0) * 130;
+        ctx.save();
+        for (let si = 0; si < streakCount; si++) {
+          const streakPhase = ((windTime * (streakSpeed * 0.002) + si * 0.37) % 1.0);
+          const streakX = width * 1.05 - streakPhase * (width * 1.25);
+          const streakY = runnerRoadY - 125 + ((si * 43) % 150);
+          const streakLen = 45 + (speed * 4) + (si % 3) * 25;
+          const streakAlpha = (Math.sin(streakPhase * Math.PI) * 0.5) * Math.min(1.0, (speed - 7.5) / 2.0);
+
+          if (streakAlpha > 0.05) {
+            const grad = ctx.createLinearGradient(streakX, streakY, streakX + streakLen, streakY);
+            const streakColor = theme === 'night' 
+              ? `rgba(180, 220, 255, ${streakAlpha})` 
+              : `rgba(255, 255, 255, ${streakAlpha})`;
+            grad.addColorStop(0, streakColor);
+            grad.addColorStop(0.3, streakColor);
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = (si % 4 === 0) ? 2.0 : 1.2;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(streakX, streakY);
+            ctx.lineTo(streakX + streakLen, streakY);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
       // ------------------------------------------
-      // 8. FOREGROUND PARTICLES (Sakura / Leaves / Fireflies)
+      // 8. FOREGROUND PARTICLES (Sakura / Autumn / Rain / Mist / Fireflies)
       // ------------------------------------------
       state.particles.forEach((p) => {
         // Particle drift speeds scale with running speed
@@ -1460,22 +1676,72 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         p.y += p.vy;
         p.rotation += p.rotSpeed;
 
-        // Wrap around screen with active theme color
-        if (p.x < -20) {
-          p.x = width + 20;
-          p.color = getParticleColor(theme);
-        }
-        if (p.y > height + 20) {
-          p.y = -20;
-          p.color = getParticleColor(theme);
+        // Wrap around screen with active weather / theme color
+        if (p.type === 'rain') {
+          if (p.y > height + 25 || p.x < -30) {
+            p.y = -20;
+            p.x = Math.random() * (width + 120);
+          }
+        } else {
+          if (p.x < -20) {
+            p.x = width + 20;
+            p.color = getParticleColor(theme, curWeather);
+          }
+          if (p.y > height + 20) {
+            p.y = -20;
+            p.color = getParticleColor(theme, curWeather);
+          }
         }
 
         ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rotation);
 
-        if (theme === 'night') {
+        if (p.type === 'rain') {
+          // Fast Angled Rain Drop Streak
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 1.2;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + p.vx * 1.5, p.y + p.vy * 1.5);
+          ctx.stroke();
+
+          // Spawn puddle ripple on pavement
+          const currentRoadY = roadLeftY + (roadRightY - roadLeftY) * ((p.x - (-20)) / (width + 40));
+          if (p.y >= currentRoadY && p.y <= currentRoadY + 32 && state.ripples.length < 20 && Math.random() < 0.25) {
+            state.ripples.push({
+              x: p.x,
+              y: p.y,
+              r: 1.5,
+              maxR: 9 + Math.random() * 6,
+              alpha: 0.8,
+            });
+          }
+        } else if (p.type === 'autumn') {
+          // Vibrant Autumn Maple Leaf (Momiji)
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, p.size, p.size * 0.55, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Stem
+          ctx.strokeStyle = '#5D4037';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(-p.size * 0.75, p.size * 0.35);
+          ctx.stroke();
+        } else if (curWeather === 'mist') {
+          // Soft Floating Mist Particle
+          ctx.translate(p.x, p.y);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size * 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (theme === 'night') {
           // Firefly Glowing Dot
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
           const pulse = 0.4 + 0.6 * Math.sin(windTime * 4 + p.x);
           ctx.fillStyle = `rgba(255, 245, 157, ${p.alpha * pulse})`;
           ctx.beginPath();
@@ -1483,6 +1749,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           ctx.fill();
         } else {
           // Petal / Leaf Shape
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
           ctx.fillStyle = p.color;
           ctx.beginPath();
           ctx.ellipse(0, 0, p.size, p.size * 0.45, 0, 0, Math.PI * 2);
@@ -1723,6 +1991,71 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
             >
               เดี่ยว
             </button>
+          </div>
+
+          {/* Weather Selector (Phase 2) */}
+          <div className="hidden md:flex items-center gap-1 bg-white/85 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-[#EDE6DC] shadow-cozy-sm text-xs font-medium">
+            <span className="text-[#8C827A] px-1 text-[11px]">สภาพอากาศ:</span>
+            <button
+              onClick={() => handleSelectWeather('clear')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                weather === 'clear' ? 'bg-[#52796F] text-white font-bold shadow-cozy-sm' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              }`}
+              title="อากาศแจ่มใส (ตามธีมหลัก)"
+            >
+              <span>☀️</span>
+              <span>แจ่มใส</span>
+            </button>
+            <button
+              onClick={() => handleSelectWeather('rain')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                weather === 'rain' ? 'bg-[#4A7A96] text-white font-bold shadow-cozy-sm' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              }`}
+              title="ฝนตกปรอยๆ บรรยากาศอบอุ่น (Cozy Drizzle)"
+            >
+              <span>🌧️</span>
+              <span>ฝนปรอย</span>
+            </button>
+            <button
+              onClick={() => handleSelectWeather('mist')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                weather === 'mist' ? 'bg-[#6B7F8C] text-white font-bold shadow-cozy-sm' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              }`}
+              title="หมอกยามเช้าลอยเรี่ยเขา (Morning Mist)"
+            >
+              <span>🌫️</span>
+              <span>หมอก</span>
+            </button>
+            <button
+              onClick={() => handleSelectWeather('autumn')}
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                weather === 'autumn' ? 'bg-[#C46849] text-white font-bold shadow-cozy-sm' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+              }`}
+              title="ลมใบไม้ร่วงสีทอง (Autumn Breeze)"
+            >
+              <span>🍂</span>
+              <span>ใบไม้ร่วง</span>
+            </button>
+          </div>
+
+          {/* Compact Weather Selector for Mobile */}
+          <div className="flex md:hidden items-center gap-0.5 bg-white/85 backdrop-blur-md px-1.5 py-1 rounded-2xl border border-[#EDE6DC] shadow-cozy-sm text-xs">
+            {(['clear', 'rain', 'mist', 'autumn'] as ScenicWeather[]).map((w) => {
+              const icons = { clear: '☀️', rain: '🌧️', mist: '🌫️', autumn: '🍂' };
+              const titles = { clear: 'แจ่มใส', rain: 'ฝนปรอย', mist: 'หมอก', autumn: 'ใบไม้ร่วง' };
+              return (
+                <button
+                  key={w}
+                  onClick={() => handleSelectWeather(w)}
+                  className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+                    weather === w ? 'bg-[#52796F] text-white scale-105 shadow-cozy-sm' : 'text-[#5A5047] hover:bg-[#FAF7F2]'
+                  }`}
+                  title={titles[w]}
+                >
+                  <span className="text-xs">{icons[w]}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
