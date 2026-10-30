@@ -20,7 +20,9 @@ import {
   Music,
   Camera,
   Ghost,
-  Trophy
+  Trophy,
+  Share2,
+  Download
 } from 'lucide-react';
 import type { TreadmillMetrics, UserProfile, WorkoutGoal } from '../types/treadmill';
 import { formatDuration, formatPace } from '../services/calculations';
@@ -74,6 +76,28 @@ export const getTimePeriodLabel = (date: Date = new Date()): string => {
   if (hour >= 6 && hour < 11) return 'เช้าสดชื่น (ซากุระ)';
   return 'กลางวันอบอุ่น (ชนบท)';
 };
+
+// Safe roundRect polyfill for older iPadOS / Safari versions
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (
+    this: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    radii: number | number[] = 0
+  ) {
+    const r = typeof radii === 'number' ? radii : Array.isArray(radii) ? (radii[0] || 0) : 0;
+    const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    this.moveTo(x + radius, y);
+    this.arcTo(x + w, y, x + w, y + h, radius);
+    this.arcTo(x + w, y + h, x, y + h, radius);
+    this.arcTo(x, y + h, x, y, radius);
+    this.arcTo(x, y, x + w, y, radius);
+    this.closePath();
+    return this;
+  };
+}
 
 interface ScenicJourneyModalProps {
   isOpen: boolean;
@@ -214,6 +238,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const maxSpeedReachedRef = useRef<number>(0);
   const hasCapturedPostcardRef = useRef<boolean>(false);
   const [showGoshuinModal, setShowGoshuinModal] = useState<boolean>(false);
+
+  // Postcard Preview & Save Modal State (Fixes iPad Safari download & bounce)
+  const [postcardPreviewUrl, setPostcardPreviewUrl] = useState<string | null>(null);
+  const [postcardBlob, setPostcardBlob] = useState<Blob | null>(null);
+  const [postcardFileName, setPostcardFileName] = useState<string>('');
 
   // Phase 2: Roadside Encounters Tracking Refs
   const encounteredDeerRef = useRef<boolean>(false);
@@ -434,21 +463,56 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       pctx.textAlign = 'right';
       pctx.fillText('Treadmill Tracker — Scenic Journey Edition', 1140, 765);
 
-      // 5. Export and Trigger Download
-      postCanvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const now = new Date();
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-        a.href = url;
-        a.download = `treadmill-postcard-${fileDate}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
+      // 5. Generate High-Res Image & Handle iPad / Desktop Safely
+      const dataUrl = postCanvas.toDataURL('image/png');
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const fileName = `treadmill-postcard-${fileDate}.png`;
 
-        setMilestoneToast('📸 บันทึกภาพโปสการ์ดความทรงจำสำเร็จแล้ว!');
-        setTimeout(() => setMilestoneToast(null), 4000);
+      // Always set preview URL so the user immediately sees their postcard
+      setPostcardPreviewUrl(dataUrl);
+      setPostcardFileName(fileName);
+
+      postCanvas.toBlob(async (blob) => {
+        if (!blob) return;
+        setPostcardBlob(blob);
+
+        const isIOS =
+          /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+        if (isIOS) {
+          // On iOS/iPadOS, attempt native share sheet to save directly to Photos without navigating away
+          try {
+            const file = new File([blob], fileName, { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+                title: 'Treadmill Scenic Postcard',
+                text: 'โปสการ์ดความทรงจำการวิ่ง Scenic Journey',
+              });
+              setMilestoneToast('📸 บันทึกภาพโปสการ์ดสำเร็จแล้ว!');
+              setTimeout(() => setMilestoneToast(null), 4000);
+            }
+          } catch (shareErr) {
+            console.log('Native share cancelled or unavailable:', shareErr);
+          }
+        } else {
+          // Desktop: Safe programmatic download without navigating away
+          try {
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setMilestoneToast('📸 บันทึกภาพโปสการ์ดความทรงจำสำเร็จแล้ว!');
+            setTimeout(() => setMilestoneToast(null), 4000);
+          } catch (err) {
+            console.error('Download error:', err);
+          }
+        }
       }, 'image/png');
     } catch (err) {
       console.error('Failed to capture scenic postcard:', err);
@@ -2918,7 +2982,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
           {/* Postcard Capture Button (Phase 4) */}
           <button
-            onClick={handleCapturePostcard}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCapturePostcard();
+            }}
             disabled={isCapturingPostcard}
             className="px-3 py-1.5 rounded-2xl bg-white/85 hover:bg-white text-[#C46849] font-semibold text-xs backdrop-blur-md border border-[#F6D8C6] transition-all cursor-pointer shadow-cozy-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
             title="บันทึกภาพโปสการ์ดความทรงจำ (Scenic Postcard)"
@@ -3309,6 +3377,102 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         onClose={() => setShowGoshuinModal(false)}
         sessionUnlockedIds={unlockedInSessionRef.current}
       />
+
+      {/* SCENIC POSTCARD PREVIEW & DIRECT SAVE MODAL (iPad & Mobile Safe) */}
+      {postcardPreviewUrl && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPostcardPreviewUrl(null)}
+        >
+          <div 
+            className="relative max-w-2xl w-full bg-[#FAF7F2] rounded-3xl p-4 sm:p-6 border-2 border-[#E7DFD5] shadow-2xl space-y-3.5 select-none text-[#2C2621]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📸</span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-[#2C2621]">
+                    โปสการ์ดความทรงจำ Scenic Run
+                  </h3>
+                  <p className="text-[11px] text-[#8C827A]">
+                    ภาพความทรงจำการออกกำลังกายพร้อมตราประทับแห่งความเพียร
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPostcardPreviewUrl(null)}
+                className="p-1.5 rounded-xl bg-white/80 hover:bg-white text-[#8C827A] hover:text-[#2C2621] transition-all cursor-pointer shadow-cozy-sm"
+                title="ปิด"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Image Preview */}
+            <div className="relative rounded-2xl overflow-hidden shadow-cozy-lg border border-[#EDE6DC] bg-white">
+              <img 
+                src={postcardPreviewUrl} 
+                alt="Scenic Postcard" 
+                className="w-full h-auto block select-auto pointer-events-auto"
+              />
+            </div>
+
+            {/* Action Buttons & iPad Tip */}
+            <div className="space-y-2 pt-1">
+              <p className="text-[11px] text-[#8C827A] text-center sm:text-left">
+                💡 <span className="font-semibold text-[#5A5047]">บน iPad/iPhone:</span> แตะภาพค้างไว้ (Long Press) เพื่อเลือก <span className="text-[#C46849] font-bold">"บันทึกรูปภาพ" (Save to Photos)</span> ได้โดยตรง
+              </p>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!postcardBlob) return;
+                      try {
+                        const file = new File([postcardBlob], postcardFileName, { type: 'image/png' });
+                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                          await navigator.share({
+                            files: [file],
+                            title: 'Treadmill Scenic Postcard',
+                            text: 'โปสการ์ดความทรงจำการวิ่ง Scenic Journey'
+                          });
+                        }
+                      } catch (e) {
+                        console.log('Share dismissed:', e);
+                      }
+                    }}
+                    className="flex-1 sm:flex-initial px-4 py-2 rounded-2xl bg-[#52796F] hover:bg-[#3B664E] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span>บันทึกรูปภาพ / แชร์</span>
+                  </button>
+                )}
+
+                <a
+                  href={postcardPreviewUrl}
+                  download={postcardFileName}
+                  className="flex-1 sm:flex-initial px-4 py-2 rounded-2xl bg-[#C46849] hover:bg-[#B3392B] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer text-center"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>ดาวน์โหลด .PNG</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setPostcardPreviewUrl(null)}
+                  className="px-4 py-2 rounded-2xl bg-[#EAE3D9] hover:bg-[#DDD5C7] text-[#5A5047] font-bold text-xs transition-all cursor-pointer"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
