@@ -626,19 +626,16 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const fujiBaseY = height * 0.68;
 
         if (assets.bgFuji) {
-          // Dedicated high-res pixel art Mount Fuji (Centered and tapered slopes)
-          // Bounds: minY=172 (peak), maxY=405 (base), total height 233 in 512px space
-          const fujiDrawW = 420;
-          const fujiDrawH = 420;
+          // Dedicated tall & towering pixel art Mount Fuji
+          // Bounds: minY=102 (high summit), maxY=511 (base), height=409px
+          const fujiDrawW = 460;
+          const fujiDrawH = 460;
           const fujiDrawX = fujiX - fujiDrawW / 2;
-          // Base at maxY=405/512 rests grounded comfortably behind rolling hills
-          const fujiDrawY = fujiBaseY - fujiDrawH * (405 / 512) + 20;
+          // Positioned so the summit towers dramatically high into the sky above distant mountains
+          const fujiDrawY = fujiBaseY - fujiDrawH * 0.92;
 
           ctx.save();
-          // Keep 100% opaque so no ghosting occurs, but apply subtle dark night tint if night theme
-          if (theme === 'night') {
-            ctx.globalAlpha = 0.95;
-          }
+          // Keep 100% solid opacity so no ghosting occurs behind mountains
           ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
           ctx.restore();
         } else {
