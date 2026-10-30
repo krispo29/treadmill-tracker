@@ -639,77 +639,63 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       if (theme === 'sakura' || theme === 'sunset' || theme === 'night') {
         const fujiX = ((width * 0.42 - farScroll * 0.6) % (width + 500) + width + 500) % (width + 500) - 150;
         const fujiBaseY = height * 0.68;
-        const fujiPeakY = fujiBaseY - 145;
-        const fujiHalfW = 120;
-        const fujiPeakHalfW = 18;
 
-        // Fuji Volcanic Body (Soft Indigo / Sunset Plum)
-        ctx.fillStyle = theme === 'night'
-          ? '#22354A'
-          : theme === 'sunset'
-          ? '#643846'
-          : '#7B8FA6'; // Japandi soft indigo
+        if (assets.bgFuji) {
+          // Dedicated high-res pixel art Mount Fuji (512x512 single isolated asset)
+          // Peak is at Y=169, Base at Y=511 (Total height 342 in 512px space)
+          const fujiDrawW = 340;
+          const fujiDrawH = 340;
+          const fujiDrawX = fujiX - fujiDrawW / 2;
+          const fujiDrawY = fujiBaseY - fujiDrawH + 12; // Base grounded nicely behind rolling hills
 
-        ctx.beginPath();
-        ctx.moveTo(fujiX - fujiHalfW, fujiBaseY);
-        // Exponential volcanic slope on left
-        ctx.quadraticCurveTo(fujiX - fujiHalfW * 0.4, fujiBaseY - 45, fujiX - fujiPeakHalfW, fujiPeakY);
-        // Crater rim
-        ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
-        // Exponential volcanic slope on right
-        ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
-        ctx.closePath();
-        ctx.fill();
+          ctx.save();
+          if (theme === 'night') {
+            ctx.globalAlpha = 0.75;
+          } else if (theme === 'sunset') {
+            ctx.globalAlpha = 0.95;
+          }
+          ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
+          ctx.restore();
+        } else {
+          // Procedural fallback Fuji
+          const fujiPeakY = fujiBaseY - 145;
+          const fujiHalfW = 120;
+          const fujiPeakHalfW = 18;
 
-        // Shaded right flank (sunlight from top-left)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-        ctx.beginPath();
-        ctx.moveTo(fujiX, fujiPeakY);
-        ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
-        ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
-        ctx.lineTo(fujiX, fujiBaseY);
-        ctx.closePath();
-        ctx.fill();
+          // Fuji Volcanic Body (Soft Indigo / Sunset Plum)
+          ctx.fillStyle = theme === 'night'
+            ? '#22354A'
+            : theme === 'sunset'
+            ? '#643846'
+            : '#7B8FA6'; // Japandi soft indigo
 
-        // Iconic Snow Cap with Jagged Crevasses
-        const snowY = fujiPeakY + 62;
-        ctx.fillStyle = theme === 'sunset' ? '#FEE4D8' : '#FFFFFF';
-        ctx.beginPath();
-        ctx.moveTo(fujiX - fujiPeakHalfW - 1, fujiPeakY);
-        ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
-        // Right side slope
-        ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
-        // Jagged snow crevasses along bottom of snowline
-        ctx.lineTo(fujiX + 32, snowY - 10);
-        ctx.lineTo(fujiX + 22, snowY + 14);
-        ctx.lineTo(fujiX + 12, snowY - 4);
-        ctx.lineTo(fujiX + 2, snowY + 18);
-        ctx.lineTo(fujiX - 8, snowY - 6);
-        ctx.lineTo(fujiX - 18, snowY + 12);
-        ctx.lineTo(fujiX - 28, snowY - 8);
-        ctx.lineTo(fujiX - 42, snowY);
-        // Left side slope
-        ctx.quadraticCurveTo(fujiX - 28, fujiPeakY + 30, fujiX - fujiPeakHalfW - 1, fujiPeakY);
-        ctx.closePath();
-        ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(fujiX - fujiHalfW, fujiBaseY);
+          ctx.quadraticCurveTo(fujiX - fujiHalfW * 0.4, fujiBaseY - 45, fujiX - fujiPeakHalfW, fujiPeakY);
+          ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
+          ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
+          ctx.closePath();
+          ctx.fill();
 
-        // Shaded side of snow cap
-        ctx.fillStyle = theme === 'night' 
-          ? 'rgba(30, 45, 65, 0.35)' 
-          : theme === 'sunset' 
-          ? 'rgba(180, 80, 80, 0.22)' 
-          : 'rgba(180, 195, 215, 0.32)';
-        ctx.beginPath();
-        ctx.moveTo(fujiX, fujiPeakY);
-        ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
-        ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
-        ctx.lineTo(fujiX + 32, snowY - 10);
-        ctx.lineTo(fujiX + 22, snowY + 14);
-        ctx.lineTo(fujiX + 12, snowY - 4);
-        ctx.lineTo(fujiX + 2, snowY + 18);
-        ctx.lineTo(fujiX, snowY + 10);
-        ctx.closePath();
-        ctx.fill();
+          // Iconic Snow Cap
+          const snowY = fujiPeakY + 62;
+          ctx.fillStyle = theme === 'sunset' ? '#FEE4D8' : '#FFFFFF';
+          ctx.beginPath();
+          ctx.moveTo(fujiX - fujiPeakHalfW - 1, fujiPeakY);
+          ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
+          ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
+          ctx.lineTo(fujiX + 32, snowY - 10);
+          ctx.lineTo(fujiX + 22, snowY + 14);
+          ctx.lineTo(fujiX + 12, snowY - 4);
+          ctx.lineTo(fujiX + 2, snowY + 18);
+          ctx.lineTo(fujiX - 8, snowY - 6);
+          ctx.lineTo(fujiX - 18, snowY + 12);
+          ctx.lineTo(fujiX - 28, snowY - 8);
+          ctx.lineTo(fujiX - 42, snowY);
+          ctx.quadraticCurveTo(fujiX - 28, fujiPeakY + 30, fujiX - fujiPeakHalfW - 1, fujiPeakY);
+          ctx.closePath();
+          ctx.fill();
+        }
       }
 
       // ------------------------------------------
