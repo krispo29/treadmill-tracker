@@ -16,11 +16,13 @@ import {
   Eye,
   EyeOff,
   Tv,
-  Clock
+  Clock,
+  Music
 } from 'lucide-react';
 import type { TreadmillMetrics, UserProfile, WorkoutGoal } from '../types/treadmill';
 import { formatDuration, formatPace } from '../services/calculations';
 import { audioCoach } from '../services/audioCoach';
+import { scenicAudioEngine } from '../services/scenicAudioEngine';
 
 export type ScenicTheme = 'sakura' | 'countryside' | 'sunset' | 'night';
 export type ScenicWeather = 'clear' | 'rain' | 'mist' | 'autumn';
@@ -132,6 +134,44 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const [zenMode, setZenMode] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Phase 3: Flow State Ambient Soundscape State
+  const [ambientSoundEnabled, setAmbientSoundEnabled] = useState(() => scenicAudioEngine.getIsEnabled());
+  const [ambientVolume, setAmbientVolume] = useState(() => scenicAudioEngine.getVolume());
+  const [showSoundMenu, setShowSoundMenu] = useState(false);
+
+  // Phase 3: Start/Stop Flow State Audio Engine when Modal Opens/Closes
+  useEffect(() => {
+    if (isOpen) {
+      scenicAudioEngine.start(theme, weather);
+    } else {
+      scenicAudioEngine.stop();
+    }
+    return () => {
+      scenicAudioEngine.stop();
+    };
+  }, [isOpen]);
+
+  // Phase 3: Crossfade Soundscape smoothly when theme or weather changes
+  useEffect(() => {
+    if (isOpen) {
+      scenicAudioEngine.updateState(theme, weather);
+    }
+  }, [theme, weather, isOpen]);
+
+  const handleToggleAmbient = () => {
+    const nextState = scenicAudioEngine.toggleEnabled();
+    setAmbientSoundEnabled(nextState);
+  };
+
+  const handleSetAmbientVolume = (vol: number) => {
+    scenicAudioEngine.setVolume(vol);
+    setAmbientVolume(vol);
+    if (!ambientSoundEnabled && vol > 0) {
+      scenicAudioEngine.setEnabled(true);
+      setAmbientSoundEnabled(true);
+    }
+  };
 
   // Refs to preserve continuous rendering without resetting the canvas engine
   const metricsRef = useRef(metrics);
@@ -2075,14 +2115,143 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
             <span className="hidden md:inline">{zenMode ? 'แสดง HUD' : 'โหมดเซ็น'}</span>
           </button>
 
-          {/* Sound Toggle */}
-          <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className="p-2 rounded-2xl bg-white/85 hover:bg-white text-[#5A5047] backdrop-blur-md border border-[#EDE6DC] transition-all cursor-pointer shadow-cozy-sm"
-            title={soundEnabled ? 'ปิดเสียงเอฟเฟกต์' : 'เปิดเสียงเอฟเฟกต์'}
-          >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-[#52796F]" /> : <VolumeX className="w-4 h-4 text-[#8C827A]" />}
-          </button>
+          {/* Sound Controls & Flow State Audio Menu (Phase 3) */}
+          <div className="relative">
+            <button
+              onClick={() => setShowSoundMenu(!showSoundMenu)}
+              className={`px-3 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md border transition-all cursor-pointer shadow-cozy-sm ${
+                ambientSoundEnabled || soundEnabled
+                  ? 'bg-white/90 text-[#3B664E] border-[#CDE0D3] hover:bg-white'
+                  : 'bg-white/80 text-[#8C827A] border-[#EDE6DC] hover:bg-white'
+              }`}
+              title="ตั้งค่าเสียงเอฟเฟกต์ & เสียงบรรยากาศธรรมชาติ (Soundscape)"
+            >
+              {ambientSoundEnabled ? (
+                <Volume2 className="w-3.5 h-3.5 text-[#52796F]" />
+              ) : soundEnabled ? (
+                <Volume2 className="w-3.5 h-3.5 text-[#8C827A]" />
+              ) : (
+                <VolumeX className="w-3.5 h-3.5 text-[#A89F91]" />
+              )}
+              <span className="hidden sm:inline">
+                {ambientSoundEnabled ? 'เสียงธรรมชาติ' : soundEnabled ? 'เสียงก้าวเท้า' : 'ปิดเสียง'}
+              </span>
+              {ambientSoundEnabled && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-[#EAF2EC] text-[#3B664E]">
+                  {Math.round(ambientVolume * 100)}%
+                </span>
+              )}
+            </button>
+
+            {/* Backdrop click-away dismissal */}
+            {showSoundMenu && (
+              <div 
+                className="fixed inset-0 z-40" 
+                onClick={() => setShowSoundMenu(false)} 
+              />
+            )}
+
+            {/* Frosted Cozy Sound Popover Menu */}
+            {showSoundMenu && (
+              <div className="absolute right-0 top-full mt-2 w-72 p-3.5 rounded-3xl bg-white/95 backdrop-blur-lg border border-[#EDE6DC] shadow-cozy-lg z-50 animate-in fade-in zoom-in-95 duration-150 space-y-3.5 text-[#2C2621]">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#F0EAE1]">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-[#3B664E]">
+                    <Music className="w-3.5 h-3.5 text-[#52796F]" />
+                    <span>เสียงและบรรยากาศ (Flow State)</span>
+                  </div>
+                  <button 
+                    onClick={() => setShowSoundMenu(false)}
+                    className="text-[#8C827A] hover:text-[#2C2621] text-xs font-bold cursor-pointer px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Section 1: Ambient Soundscape */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-[#443830] flex items-center gap-1">
+                        <span>🍃</span>
+                        <span>เสียงธรรมชาติเบื้องหลัง</span>
+                      </div>
+                      <div className="text-[10px] text-[#8C827A]">
+                        {weather === 'rain'
+                          ? '🌧️ ละอองฝนตกปรอยๆ (Cozy Drizzle)'
+                          : weather === 'mist'
+                          ? '🌫️ สายลมหมอกหุบเขา (Mountain Drone)'
+                          : theme === 'sakura'
+                          ? '🌸 ลมยอดไม้ + กระดิ่งลมญี่ปุ่น (Fuurin)'
+                          : theme === 'countryside'
+                          ? '☕ นกยามเช้า + สายน้ำไหลเอื่อย'
+                          : theme === 'sunset'
+                          ? '🌅 คลื่นซัดหาดทรายยามอัสดง'
+                          : '🌙 ลมค่ำคืน + จิ้งหรีด Lo-Fi'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleToggleAmbient}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                        ambientSoundEnabled
+                          ? 'bg-[#52796F] text-white shadow-cozy-sm'
+                          : 'bg-[#F3EFE6] text-[#8C827A] hover:bg-[#EAE3D9]'
+                      }`}
+                    >
+                      {ambientSoundEnabled ? 'เปิดอยู่' : 'ปิด'}
+                    </button>
+                  </div>
+
+                  {/* Volume Steppers */}
+                  {ambientSoundEnabled && (
+                    <div className="flex items-center gap-1 pt-1">
+                      <span className="text-[10px] font-semibold text-[#8C827A] mr-1">ระดับเสียง:</span>
+                      {[
+                        { label: '30%', val: 0.3 },
+                        { label: '60%', val: 0.6 },
+                        { label: '90%', val: 0.9 },
+                      ].map((lvl) => (
+                        <button
+                          key={lvl.val}
+                          onClick={() => handleSetAmbientVolume(lvl.val)}
+                          className={`flex-1 py-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                            Math.abs(ambientVolume - lvl.val) < 0.15
+                              ? 'bg-[#EAF2EC] text-[#3B664E] border border-[#52796F] shadow-cozy-sm'
+                              : 'bg-[#FAF7F2] text-[#5A5047] border border-[#EDE6DC] hover:bg-white'
+                          }`}
+                        >
+                          {lvl.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: SFX & Footsteps */}
+                <div className="pt-2 border-t border-[#F0EAE1] flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-[#443830] flex items-center gap-1">
+                      <span>👟</span>
+                      <span>เสียงก้าวเท้า & ชัยชนะ</span>
+                    </div>
+                    <div className="text-[10px] text-[#8C827A]">
+                      เสียงฝีเท้าตามรอบขา และดนตรีเฉลิมฉลอง
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                      soundEnabled
+                        ? 'bg-[#52796F] text-white shadow-cozy-sm'
+                        : 'bg-[#F3EFE6] text-[#8C827A] hover:bg-[#EAE3D9]'
+                    }`}
+                  >
+                    {soundEnabled ? 'เปิดอยู่' : 'ปิด'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Switch to Giant HUD */}
           {onOpenGiantHud && (
