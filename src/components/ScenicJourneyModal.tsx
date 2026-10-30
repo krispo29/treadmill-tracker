@@ -112,6 +112,45 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Refs to preserve continuous rendering without resetting the canvas engine
+  const metricsRef = useRef(metrics);
+  const themeRef = useRef(theme);
+  const companionRef = useRef(companion);
+  const soundEnabledRef = useRef(soundEnabled);
+
+  // Synchronize refs safely in effect
+  useEffect(() => {
+    metricsRef.current = metrics;
+    themeRef.current = theme;
+    companionRef.current = companion;
+    soundEnabledRef.current = soundEnabled;
+  });
+
+  // Persistent Canvas Animation State (Never restarts or jumps when metrics/theme update)
+  const animStateRef = useRef<{
+    groundScroll: number;
+    midScroll: number;
+    farScroll: number;
+    cadencePhase: number;
+    lastFootstepPhase: number;
+    companionPhase: number;
+    windTime: number;
+    smoothDistance: number;
+    lastTime: number;
+    particles: Particle[];
+  }>({
+    groundScroll: 0,
+    midScroll: 0,
+    farScroll: 0,
+    cadencePhase: 0,
+    lastFootstepPhase: 0,
+    companionPhase: 0,
+    windTime: 0,
+    smoothDistance: metrics.distanceMeters || 0,
+    lastTime: 0,
+    particles: [],
+  });
+
   // Update clock every 10 seconds to auto-transition time periods smoothly
   useEffect(() => {
     const timer = setInterval(() => {
@@ -130,7 +169,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   };
 
   // Pixel Art Image Assets Preloader
-  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const [, setAssetsLoaded] = useState(false);
   const assetsRef = useRef<{
     runnerRun: HTMLImageElement | null;
     runnerIdle: HTMLImageElement | null;
@@ -336,37 +375,26 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     if (!ctx) return;
 
     let animationFrameId: number;
-    let lastTime = performance.now();
+    animStateRef.current.lastTime = performance.now();
 
-    // Scene Physics & Offsets
-    let groundScroll = 0;
-    let midScroll = 0;
-    let farScroll = 0;
-    let cadencePhase = 0;
-    let lastFootstepPhase = 0;
-    let companionPhase = 0;
-    let windTime = 0;
+    const getParticleColor = (curTheme: string) => {
+      if (curTheme === 'countryside') return Math.random() > 0.5 ? 'rgba(235, 179, 90, 0.7)' : 'rgba(168, 204, 168, 0.7)';
+      if (curTheme === 'sunset') return 'rgba(255, 214, 165, 0.75)';
+      if (curTheme === 'night') return 'rgba(255, 245, 157, 0.85)'; // Firefly glow
+      return 'rgba(255, 183, 197, 0.7)'; // Sakura pink
+    };
 
-    // Initialize ambient particles
-    const particles: Particle[] = [];
-    const maxParticles = theme === 'night' ? 70 : 45;
-
-    const createParticle = (width: number, height: number): Particle => {
-      let color = 'rgba(255, 183, 197, 0.7)'; // Sakura pink
-      if (theme === 'countryside') color = Math.random() > 0.5 ? 'rgba(235, 179, 90, 0.7)' : 'rgba(168, 204, 168, 0.7)';
-      if (theme === 'sunset') color = 'rgba(255, 214, 165, 0.75)';
-      if (theme === 'night') color = 'rgba(255, 245, 157, 0.85)'; // Firefly glow
-
+    const createParticle = (width: number, height: number, curTheme: string): Particle => {
       return {
         x: Math.random() * width,
         y: Math.random() * height,
         vx: -(1.5 + Math.random() * 2.5),
         vy: 0.4 + Math.random() * 1.2,
-        size: theme === 'night' ? 2 + Math.random() * 2.5 : 5 + Math.random() * 7,
+        size: curTheme === 'night' ? 2 + Math.random() * 2.5 : 5 + Math.random() * 7,
         rotation: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() - 0.5) * 0.06,
         alpha: 0.3 + Math.random() * 0.7,
-        color
+        color: getParticleColor(curTheme)
       };
     };
 
@@ -382,10 +410,13 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Re-seed particles to screen boundaries
-      if (particles.length === 0) {
+      // Re-seed particles to screen boundaries if empty
+      const state = animStateRef.current;
+      const curTheme = themeRef.current;
+      const maxParticles = curTheme === 'night' ? 70 : 45;
+      if (state.particles.length === 0) {
         for (let i = 0; i < maxParticles; i++) {
-          particles.push(createParticle(width, height));
+          state.particles.push(createParticle(width, height, curTheme));
         }
       }
     };
@@ -424,9 +455,16 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     // MAIN RENDER LOOP (60 FPS)
     // ==========================================
     const render = (currentTime: number) => {
-      const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
-      lastTime = currentTime;
-      windTime += dt;
+      const state = animStateRef.current;
+      const metrics = metricsRef.current;
+      const theme = themeRef.current;
+      const companion = companionRef.current;
+      const soundEnabled = soundEnabledRef.current;
+
+      const dt = Math.min((currentTime - state.lastTime) / 1000, 0.1);
+      state.lastTime = currentTime;
+      state.windTime += dt;
+      const windTime = state.windTime;
 
       const width = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
       const height = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
@@ -436,32 +474,59 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // Speed factor based on treadmill speed
       const speed = metrics.speedKmh;
       const isMoving = speed > 0.15;
-      
-      // Speed multiplier for background parallax
-      const scrollSpeed = isMoving ? speed * 28 : 2.5; // slow idle breeze when stopped
-      groundScroll = (groundScroll + scrollSpeed * dt * 8) % width;
-      midScroll = (midScroll + scrollSpeed * dt * 2.2) % width;
-      farScroll = (farScroll + scrollSpeed * dt * 0.5) % width;
+
+      // 1. Continuous Distance Tracking (Never freezes or teleports landmarks)
+      if (isMoving) {
+        state.smoothDistance += (speed / 3.6) * dt;
+      }
+      if (metrics.distanceMeters > 0) {
+        const distDiff = metrics.distanceMeters - state.smoothDistance;
+        if (Math.abs(distDiff) > 25) {
+          state.smoothDistance = metrics.distanceMeters;
+        } else {
+          state.smoothDistance += distDiff * Math.min(1.0, dt * 2.5);
+        }
+      }
+      const currentDistanceMeters = state.smoothDistance;
+
+      // 2. Continuous Parallax Scrolling (Zero seams, zero hitching)
+      const roadSpeed = isMoving ? speed * 22 : 0;
+      state.groundScroll += roadSpeed * dt;
+      if (state.groundScroll > 44000) state.groundScroll %= 44;
+      const groundScroll = state.groundScroll;
+
+      const hillSpeed = isMoving ? speed * 8.5 + 2.0 : 2.0;
+      state.midScroll += hillSpeed * dt;
+      if (state.midScroll > 960000) state.midScroll %= 960;
+      const midScroll = state.midScroll;
+
+      const mountainSpeed = isMoving ? speed * 2.6 + 0.8 : 0.8;
+      state.farScroll += mountainSpeed * dt;
+      if (state.farScroll > 1000000) state.farScroll %= 1000;
+      const farScroll = state.farScroll;
 
       // Incline slope calculation (0 to 20 level -> 0° to 12° slope)
       const inclineAngle = (Math.min(20, metrics.inclineLevel) / 20) * (10 * Math.PI / 180);
 
       // Cadence calculation: steps per second
-      // Walking (3 km/h) -> ~1.8 steps/sec
-      // Jogging (6 km/h) -> ~2.6 steps/sec
-      // Running (10 km/h) -> ~3.1 steps/sec
       const stepRate = isMoving ? Math.min(4.0, 1.3 + (speed / 10) * 1.8) : 0;
       if (isMoving) {
-        cadencePhase += dt * stepRate * Math.PI * 2;
-        companionPhase += dt * (stepRate * 1.15) * Math.PI * 2;
+        state.cadencePhase += dt * stepRate * Math.PI * 2;
+        state.companionPhase += dt * (stepRate * 1.15) * Math.PI * 2;
+        if (state.cadencePhase > 20000 * Math.PI) state.cadencePhase %= 2 * Math.PI;
+        if (state.companionPhase > 20000 * Math.PI) state.companionPhase %= 2 * Math.PI;
 
         // Trigger footstep sound at bottom of stride
-        const currentHalf = Math.floor(cadencePhase / Math.PI);
-        if (currentHalf > lastFootstepPhase) {
-          lastFootstepPhase = currentHalf;
-          playFootstepTone();
+        const currentHalf = Math.floor(state.cadencePhase / Math.PI);
+        if (currentHalf > state.lastFootstepPhase) {
+          state.lastFootstepPhase = currentHalf;
+          if (soundEnabled) {
+            playFootstepTone();
+          }
         }
       }
+      const cadencePhase = state.cadencePhase;
+      const companionPhase = state.companionPhase;
 
       ctx.clearRect(0, 0, width, height);
 
@@ -869,8 +934,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.stroke();
       ctx.setLineDash([]); // Reset dash
 
-      // Milestone Distance Posts along the trail
-      const currentDistanceMeters = metrics.distanceMeters;
+      // Milestone Distance Posts along the trail (Smooth continuous 60 FPS gliding)
       const markerIntervalM = 250; // every 250m
       const baseMarker = Math.floor(currentDistanceMeters / markerIntervalM) * markerIntervalM;
 
@@ -1298,16 +1362,22 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // ------------------------------------------
       // 8. FOREGROUND PARTICLES (Sakura / Leaves / Fireflies)
       // ------------------------------------------
-      particles.forEach((p) => {
+      state.particles.forEach((p) => {
         // Particle drift speeds scale with running speed
         const particleSpeedMult = isMoving ? 1 + speed * 0.15 : 1;
         p.x += p.vx * particleSpeedMult;
         p.y += p.vy;
         p.rotation += p.rotSpeed;
 
-        // Wrap around screen
-        if (p.x < -20) p.x = width + 20;
-        if (p.y > height + 20) p.y = -20;
+        // Wrap around screen with active theme color
+        if (p.x < -20) {
+          p.x = width + 20;
+          p.color = getParticleColor(theme);
+        }
+        if (p.y > height + 20) {
+          p.y = -20;
+          p.color = getParticleColor(theme);
+        }
 
         ctx.save();
         ctx.translate(p.x, p.y);
@@ -1340,7 +1410,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
     };
-  }, [isOpen, theme, companion, metrics.speedKmh, metrics.inclineLevel, metrics.distanceMeters, soundEnabled, assetsLoaded]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
