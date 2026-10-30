@@ -36,6 +36,7 @@ import {
   type AchievementItem
 } from '../services/scenicAchievements';
 import { ScenicAchievementToast } from './ScenicAchievementToast';
+import { ScenicGoshuinModal } from './ScenicGoshuinModal';
 
 export type ScenicTheme = 'sakura' | 'countryside' | 'sunset' | 'night';
 export type ScenicWeather = 'clear' | 'rain' | 'mist' | 'autumn';
@@ -212,6 +213,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const [unlockedCount, setUnlockedCount] = useState<number>(() => getUnlockedAchievementIds().length);
   const maxSpeedReachedRef = useRef<number>(0);
   const hasCapturedPostcardRef = useRef<boolean>(false);
+  const [showGoshuinModal, setShowGoshuinModal] = useState<boolean>(false);
 
   // Phase 2: Roadside Encounters Tracking Refs
   const encounteredDeerRef = useRef<boolean>(false);
@@ -333,6 +335,39 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       pctx.font = 'bold 8px ui-monospace, monospace';
       pctx.fillText(new Date().toLocaleDateString('ja-JP').replace(/\//g, '.'), 0, 22);
       pctx.restore();
+
+      // 3.5 Phase 3: Goshuin Achievement Seal Stamp (if any unlocked)
+      const latestAchId = Array.from(unlockedInSessionRef.current).pop() || getUnlockedAchievementIds()[0];
+      const latestAch = latestAchId ? ACHIEVEMENT_CATALOG.find((a) => a.id === latestAchId) : null;
+      if (latestAch) {
+        const achSealX = photoX + 75;
+        const achSealY = photoY + 70;
+        pctx.save();
+        pctx.translate(achSealX, achSealY);
+        pctx.rotate(0.06);
+
+        pctx.strokeStyle = '#B3392B';
+        pctx.lineWidth = 2.2;
+        pctx.beginPath();
+        pctx.roundRect(-55, -45, 110, 90, 8);
+        pctx.stroke();
+
+        pctx.lineWidth = 1.0;
+        pctx.beginPath();
+        pctx.roundRect(-50, -40, 100, 80, 6);
+        pctx.stroke();
+
+        pctx.fillStyle = '#B3392B';
+        pctx.font = 'bold 15px ui-sans-serif, system-ui, sans-serif';
+        pctx.textAlign = 'center';
+        pctx.textBaseline = 'middle';
+        pctx.fillText(`${latestAch.icon} 達成`, 0, -18);
+        pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+        pctx.fillText(latestAch.title.slice(0, 10), 0, 4);
+        pctx.font = 'bold 8px ui-monospace, monospace';
+        pctx.fillText('GOSHUIN SEAL', 0, 22);
+        pctx.restore();
+      }
 
       // 4. Bottom Metadata Area
       const metaBaseY = 635;
@@ -2870,15 +2905,16 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
             )}
           </div>
 
-          {/* Steam-Style Achievement Trophy Counter (Phase 1) */}
-          <div
-            className="px-2.5 py-1.5 rounded-2xl bg-white/85 hover:bg-white text-[#B7950B] font-semibold text-xs backdrop-blur-md border border-[#F9E79F] transition-all shadow-cozy-sm flex items-center gap-1.5"
-            title={`ปลดล็อกความสำเร็จแล้ว ${unlockedCount} จาก ${ACHIEVEMENT_CATALOG.length} รายการ`}
+          {/* Goshuincho Stamp Journal Button (Phase 3) */}
+          <button
+            onClick={() => setShowGoshuinModal(true)}
+            className="px-2.5 py-1.5 rounded-2xl bg-white/85 hover:bg-white text-[#B7950B] font-semibold text-xs backdrop-blur-md border border-[#F9E79F] transition-all shadow-cozy-sm flex items-center gap-1.5 cursor-pointer hover:scale-105 active:scale-95"
+            title={`คลิกเพื่อเปิดสมุดสะสมตราประทับ (Goshuincho) • สำเร็จแล้ว ${unlockedCount}/${ACHIEVEMENT_CATALOG.length} ตรา`}
           >
             <Trophy className="w-3.5 h-3.5 text-[#F5BA42]" />
-            <span className="font-mono text-[11px] font-bold text-[#8D6E63] hidden sm:inline">ความสำเร็จ</span>
+            <span className="font-mono text-[11px] font-bold text-[#8D6E63] hidden sm:inline">สมุดตราประทับ</span>
             <span className="font-mono text-[11px] font-black text-[#B7950B]">{unlockedCount}/{ACHIEVEMENT_CATALOG.length}</span>
-          </div>
+          </button>
 
           {/* Postcard Capture Button (Phase 4) */}
           <button
@@ -3265,6 +3301,13 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       <ScenicAchievementToast
         queue={achievementQueue}
         onDismiss={handleDismissAchievement}
+      />
+
+      {/* GOSHUINCHO ACHIEVEMENT STAMP JOURNAL MODAL (Phase 3) */}
+      <ScenicGoshuinModal
+        isOpen={showGoshuinModal}
+        onClose={() => setShowGoshuinModal(false)}
+        sessionUnlockedIds={unlockedInSessionRef.current}
       />
     </div>
   );
