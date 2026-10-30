@@ -139,6 +139,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     bgMountains: HTMLImageElement | null;
     bgHills: HTMLImageElement | null;
     bgSunSunset: HTMLImageElement | null;
+    bgMoonCrescent: HTMLImageElement | null;
     landmarkCafe: HTMLImageElement | null;
     landmarkSakuraTree: HTMLImageElement | null;
     landmarkTorii: HTMLImageElement | null;
@@ -152,6 +153,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     bgMountains: null,
     bgHills: null,
     bgSunSunset: null,
+    bgMoonCrescent: null,
     landmarkCafe: null,
     landmarkSakuraTree: null,
     landmarkTorii: null,
@@ -179,6 +181,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           bgMountains,
           bgHills,
           bgSunSunset,
+          bgMoonCrescent,
           landmarkCafe,
           landmarkSakuraTree,
           landmarkTorii,
@@ -192,6 +195,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           loadImg('/assets/scenic/bg-mountains-distant.png'),
           loadImg('/assets/scenic/bg-hills-green.png'),
           loadImg('/assets/scenic/bg-sun-sunset.png'),
+          loadImg('/assets/scenic/bg-moon-crescent.png'),
           loadImg('/assets/scenic/landmark-cafe-kiosk.png'),
           loadImg('/assets/scenic/landmark-sakura-tree.png'),
           loadImg('/assets/scenic/landmark-torii-gate.png'),
@@ -207,6 +211,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           bgMountains,
           bgHills,
           bgSunSunset,
+          bgMoonCrescent,
           landmarkCafe,
           landmarkSakuraTree,
           landmarkTorii,
@@ -373,6 +378,33 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     handleResize();
     window.addEventListener('resize', handleResize);
 
+    /**
+     * Smart Sprite Drawer:
+     * If image is a 256x256 PixelLab sprite sheet grid (e.g. 8x8, 4x4, 2x2),
+     * automatically slices out exactly 1 single sprite cell!
+     * If the user later uploads a true single-sprite image, draws whole image.
+     */
+    const drawSprite = (
+      image: HTMLImageElement,
+      defaultCols: number,
+      defaultRows: number,
+      cellCol: number,
+      cellRow: number,
+      dx: number,
+      dy: number,
+      dw: number,
+      dh: number
+    ) => {
+      const isSheet = image.naturalWidth >= 200;
+      const cols = isSheet ? defaultCols : 1;
+      const rows = isSheet ? defaultRows : 1;
+      const sw = image.naturalWidth / cols;
+      const sh = image.naturalHeight / rows;
+      const sx = (cellCol % cols) * sw;
+      const sy = (cellRow % rows) * sh;
+      ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+    };
+
     // ==========================================
     // MAIN RENDER LOOP (60 FPS)
     // ==========================================
@@ -466,14 +498,18 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.arc(moonX, moonY, 44, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#FFF8D6';
-        ctx.beginPath();
-        ctx.arc(moonX, moonY, 30, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#14212E';
-        ctx.beginPath();
-        ctx.arc(moonX - 10, moonY - 6, 26, 0, Math.PI * 2);
-        ctx.fill();
+        if (assets.bgMoonCrescent) {
+          drawSprite(assets.bgMoonCrescent, 4, 4, 0, 0, moonX - 35, moonY - 35, 70, 70);
+        } else {
+          ctx.fillStyle = '#FFF8D6';
+          ctx.beginPath();
+          ctx.arc(moonX, moonY, 30, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#14212E';
+          ctx.beginPath();
+          ctx.arc(moonX - 10, moonY - 6, 26, 0, Math.PI * 2);
+          ctx.fill();
+        }
       } else if (theme === 'sunset') {
         // Large Golden Setting Sun
         const sunX = width * 0.72;
@@ -489,7 +525,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
         if (assets.bgSunSunset) {
           const sunSize = 100;
-          ctx.drawImage(assets.bgSunSunset, sunX - sunSize / 2, sunY - sunSize / 2, sunSize, sunSize);
+          drawSprite(assets.bgSunSunset, 4, 4, 0, 0, sunX - sunSize / 2, sunY - sunSize / 2, sunSize, sunSize);
         } else {
           ctx.fillStyle = '#FFF2D6';
           ctx.beginPath();
@@ -539,12 +575,12 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const cloudScale = 0.8 + (i % 3) * 0.25;
 
         if (assets.bgCloud) {
-          const cw = 96 * cloudScale;
-          const ch = 96 * cloudScale;
+          const cw = 88 * cloudScale;
+          const ch = 88 * cloudScale;
           ctx.save();
           if (theme === 'night') ctx.globalAlpha = 0.45;
           else if (theme === 'sunset') ctx.globalAlpha = 0.85;
-          ctx.drawImage(assets.bgCloud, cloudX, cloudY, cw, ch);
+          drawSprite(assets.bgCloud, 8, 8, i % 8, 0, cloudX, cloudY, cw, ch);
           ctx.restore();
         } else {
           drawCloud(cloudX, cloudY, cloudScale);
@@ -557,14 +593,14 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       const mountainY = height * 0.62;
 
       if (assets.bgMountains) {
-        // Pixel Art Mountain Silhouette Layer
+        // Pixel Art Mountain Silhouette Layer (Crop single row 0)
         const mWidth = 280;
-        const mHeight = 140;
+        const mHeight = 110;
         const startX = -((farScroll * 0.8) % mWidth);
         ctx.save();
         if (theme === 'night') ctx.globalAlpha = 0.6;
         for (let mx = startX - mWidth; mx < width + mWidth; mx += mWidth) {
-          ctx.drawImage(assets.bgMountains, mx, mountainY - mHeight + 35, mWidth, mHeight);
+          drawSprite(assets.bgMountains, 1, 8, 0, 0, mx, mountainY - mHeight + 35, mWidth, mHeight);
         }
         ctx.restore();
       } else {
@@ -594,8 +630,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       if (theme === 'sakura') {
         const fujiX = ((width * 0.45 - farScroll * 0.8) % (width + 400) + width + 400) % (width + 400) - 200;
         if (assets.bgFuji) {
-          const fujiSize = 190;
-          ctx.drawImage(assets.bgFuji, fujiX - fujiSize / 2, mountainY - fujiSize + 45, fujiSize, fujiSize);
+          const fujiSize = 180;
+          drawSprite(assets.bgFuji, 2, 2, 0, 0, fujiX - fujiSize / 2, mountainY - fujiSize + 45, fujiSize, fujiSize);
         } else {
           const fujiY = mountainY - 140;
           ctx.fillStyle = '#FFFFFF';
@@ -618,14 +654,14 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       const midHillY = height * 0.70;
 
       if (assets.bgHills) {
-        // Pixel Art Rolling Green Hills
+        // Pixel Art Rolling Green Hills (Crop single row 0)
         const hillW = 280;
-        const hillH = 140;
+        const hillH = 110;
         const startHX = -((midScroll * 0.9) % hillW);
         ctx.save();
         if (theme === 'night') ctx.globalAlpha = 0.55;
         for (let hx = startHX - hillW; hx < width + hillW; hx += hillW) {
-          ctx.drawImage(assets.bgHills, hx, midHillY - hillH + 40, hillW, hillH);
+          drawSprite(assets.bgHills, 1, 8, 0, 0, hx, midHillY - hillH + 40, hillW, hillH);
         }
         ctx.restore();
       } else {
@@ -654,7 +690,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const millX = ((width * 0.35 - midScroll) % (width + 600) + width + 600) % (width + 600) - 100;
         const millY = midHillY - 40;
         if (assets.landmarkWindmill) {
-          ctx.drawImage(assets.landmarkWindmill, millX - 45, millY - 45, 90, 90);
+          drawSprite(assets.landmarkWindmill, 4, 4, 0, 0, millX - 45, millY - 45, 90, 90);
         } else {
           // Tower
           ctx.fillStyle = '#FAF7F2';
@@ -692,7 +728,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           for (let i = 0; i < 4; i++) {
             const treeX = ((i * 340 - midScroll) % (width + 400) + width + 400) % (width + 400) - 80;
             const treeY = midHillY - 60;
-            ctx.drawImage(assets.landmarkSakuraTree, treeX - 45, treeY, 90, 90);
+            drawSprite(assets.landmarkSakuraTree, 4, 4, i % 4, 0, treeX - 45, treeY, 90, 90);
           }
         } else {
           const drawTree = (tx: number, ty: number) => {
@@ -786,7 +822,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const markerY = roadLeftY + (roadRightY - roadLeftY) * t;
 
           if (assets.propMilestone) {
-            ctx.drawImage(assets.propMilestone, markerX - 25, markerY - 48, 50, 50);
+            drawSprite(assets.propMilestone, 8, 8, 0, 0, markerX - 25, markerY - 48, 50, 50);
           } else {
             // Cute wooden milestone signpost fallback
             ctx.fillStyle = '#8D6E63';
@@ -826,7 +862,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         if (cafeX >= -100 && cafeX <= width + 100) {
           const t = (cafeX - (-20)) / (width + 40);
           const cafeY = roadLeftY + (roadRightY - roadLeftY) * t;
-          ctx.drawImage(assets.landmarkCafe, cafeX - 45, cafeY - 82, 90, 90);
+          drawSprite(assets.landmarkCafe, 4, 4, 0, 0, cafeX - 45, cafeY - 82, 90, 90);
         }
       }
 
@@ -838,7 +874,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         if (toriiX >= -100 && toriiX <= width + 100) {
           const t = (toriiX - (-20)) / (width + 40);
           const toriiY = roadLeftY + (roadRightY - roadLeftY) * t;
-          ctx.drawImage(assets.landmarkTorii, toriiX - 45, toriiY - 90, 90, 90);
+          drawSprite(assets.landmarkTorii, 4, 4, 0, 0, toriiX - 45, toriiY - 90, 90, 90);
         }
       }
 
@@ -868,15 +904,20 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // ==========================================
       // DRAW RUNNER (Pixel Art Sprite from PixelLab or Vector Fallback)
       // ==========================================
-      const runnerSprite = isMoving ? assets.runnerRun : assets.runnerIdle;
-
-      if (runnerSprite) {
+      if (isMoving && assets.runnerRun) {
         ctx.save();
         ctx.translate(runnerX, runnerRoadY - verticalBounce);
-        ctx.rotate(-inclineAngle + (isMoving ? forwardLean : 0));
-        // Pixel Art character (256x256 sprite drawn at 88x88 crisp)
+        ctx.rotate(-inclineAngle + forwardLean);
         const drawSize = 88;
-        ctx.drawImage(runnerSprite, -drawSize / 2, -drawSize + 8, drawSize, drawSize);
+        const runFrame = Math.floor(cadencePhase / (Math.PI / 4)) % 8;
+        drawSprite(assets.runnerRun, 8, 8, runFrame, 0, -drawSize / 2, -drawSize + 8, drawSize, drawSize);
+        ctx.restore();
+      } else if (!isMoving && assets.runnerIdle) {
+        ctx.save();
+        ctx.translate(runnerX, runnerRoadY - verticalBounce);
+        ctx.rotate(-inclineAngle);
+        const drawSize = 88;
+        drawSprite(assets.runnerIdle, 8, 8, 0, 0, -drawSize / 2, -drawSize + 8, drawSize, drawSize);
         ctx.restore();
       } else {
         // Procedural vector runner fallback
