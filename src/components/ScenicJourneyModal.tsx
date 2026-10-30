@@ -575,12 +575,12 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const cloudScale = 0.8 + (i % 3) * 0.25;
 
         if (assets.bgCloud) {
-          const cw = 88 * cloudScale;
-          const ch = 88 * cloudScale;
+          const cw = 96 * cloudScale;
+          const ch = 72 * cloudScale;
           ctx.save();
           if (theme === 'night') ctx.globalAlpha = 0.45;
           else if (theme === 'sunset') ctx.globalAlpha = 0.85;
-          drawSprite(assets.bgCloud, 8, 8, i % 8, 0, cloudX, cloudY, cw, ch);
+          drawSprite(assets.bgCloud, 4, 4, i % 4, 0, cloudX, cloudY, cw, ch);
           ctx.restore();
         } else {
           drawCloud(cloudX, cloudY, cloudScale);
@@ -590,17 +590,27 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // ------------------------------------------
       // 4. DISTANT MOUNTAINS / HILLS (Parallax Layer Mid-Far)
       // ------------------------------------------
-      const mountainY = height * 0.62;
+      const mountainY = height * 0.60;
+
+      // Atmospheric distant mountain base (prevents gaps)
+      ctx.fillStyle = theme === 'night'
+        ? '#13212D'
+        : theme === 'sunset'
+        ? '#8A4A48'
+        : theme === 'sakura'
+        ? '#C4D4E0' // Lavender mountain base
+        : '#B7CEBE'; // Sage mountain base
+      ctx.fillRect(-50, mountainY, width + 100, height - mountainY);
 
       if (assets.bgMountains) {
-        // Pixel Art Mountain Silhouette Layer (Crop single row 0)
-        const mWidth = 280;
-        const mHeight = 110;
+        // Pixel Art Mountain Silhouette Layer (Row 0 of 4, each 256x64)
+        const mWidth = 320;
+        const mHeight = 85;
         const startX = -((farScroll * 0.8) % mWidth);
         ctx.save();
         if (theme === 'night') ctx.globalAlpha = 0.6;
         for (let mx = startX - mWidth; mx < width + mWidth; mx += mWidth) {
-          drawSprite(assets.bgMountains, 1, 8, 0, 0, mx, mountainY - mHeight + 35, mWidth, mHeight);
+          drawSprite(assets.bgMountains, 1, 4, 0, 0, mx, mountainY - mHeight + 15, mWidth, mHeight);
         }
         ctx.restore();
       } else {
@@ -627,11 +637,17 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }
 
       // Fuji Peak Snow Cap (if Sakura theme)
+      // ------------------------------------------
+      const midHillY = height * 0.67;
+
       if (theme === 'sakura') {
         const fujiX = ((width * 0.45 - farScroll * 0.8) % (width + 400) + width + 400) % (width + 400) - 200;
         if (assets.bgFuji) {
-          const fujiSize = 180;
-          drawSprite(assets.bgFuji, 2, 2, 0, 0, fujiX - fujiSize / 2, mountainY - fujiSize + 45, fujiSize, fujiSize);
+          // Mount Fuji is 2x2 (128x128 each cell), base ends at maxY=112 out of 128
+          const fujiW = 220;
+          const fujiH = 175;
+          // Position so base is grounded behind mid-ground hills
+          drawSprite(assets.bgFuji, 2, 2, 0, 0, fujiX - fujiW / 2, midHillY - fujiH * (112 / 128) + 16, fujiW, fujiH);
         } else {
           const fujiY = mountainY - 140;
           ctx.fillStyle = '#FFFFFF';
@@ -649,19 +665,37 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }
 
       // ------------------------------------------
-      // 5. MID-GROUND ROLLING HILLS & COZY CABINS / TREES
+      // 5. MID-GROUND ROLLING HILLS & COZY MEADOW GROUND
       // ------------------------------------------
-      const midHillY = height * 0.70;
+      // Solid meadow fill from midHillY all the way down to road (eliminates any white gap!)
+      ctx.fillStyle = theme === 'night'
+        ? '#192C23'
+        : theme === 'sunset'
+        ? '#6B4031'
+        : theme === 'sakura'
+        ? '#779970' // Cozy matcha pasture
+        : '#5D7951'; // Rural grassy green
+
+      ctx.beginPath();
+      ctx.moveTo(-50, height);
+      ctx.lineTo(-50, midHillY);
+      for (let x = -50; x <= width + 100; x += 60) {
+        const hillOffset = Math.sin((x + midScroll) * 0.007) * 18;
+        ctx.lineTo(x, midHillY + hillOffset);
+      }
+      ctx.lineTo(width + 100, height);
+      ctx.closePath();
+      ctx.fill();
 
       if (assets.bgHills) {
-        // Pixel Art Rolling Green Hills (Crop single row 0)
-        const hillW = 280;
-        const hillH = 110;
+        // Pixel Art Rolling Green Hills (Row 2 of 4 has lush fenced hills, each 256x64)
+        const hillW = 320;
+        const hillH = 80;
         const startHX = -((midScroll * 0.9) % hillW);
         ctx.save();
         if (theme === 'night') ctx.globalAlpha = 0.55;
         for (let hx = startHX - hillW; hx < width + hillW; hx += hillW) {
-          drawSprite(assets.bgHills, 1, 8, 0, 0, hx, midHillY - hillH + 40, hillW, hillH);
+          drawSprite(assets.bgHills, 1, 4, 0, 2, hx, midHillY - hillH + 24, hillW, hillH);
         }
         ctx.restore();
       } else {
@@ -822,7 +856,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const markerY = roadLeftY + (roadRightY - roadLeftY) * t;
 
           if (assets.propMilestone) {
-            drawSprite(assets.propMilestone, 8, 8, 0, 0, markerX - 25, markerY - 48, 50, 50);
+            // Milestone post is 4x4 (64x64 each cell), base at maxY=62
+            drawSprite(assets.propMilestone, 4, 4, 0, 0, markerX - 25, markerY - 48, 50, 50);
           } else {
             // Cute wooden milestone signpost fallback
             ctx.fillStyle = '#8D6E63';
@@ -904,20 +939,26 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // ==========================================
       // DRAW RUNNER (Pixel Art Sprite from PixelLab or Vector Fallback)
       // ==========================================
+      const runnerSpriteW = 86;
+      const runnerSpriteH = 86;
+      // In 64x64 cell, feet rest at y=60 (60/64). Offset dy grounds feet exactly on road!
+      const runnerGroundDy = -runnerSpriteH * (60 / 64);
+
       if (isMoving && assets.runnerRun) {
         ctx.save();
         ctx.translate(runnerX, runnerRoadY - verticalBounce);
         ctx.rotate(-inclineAngle + forwardLean);
-        const drawSize = 88;
-        const runFrame = Math.floor(cadencePhase / (Math.PI / 4)) % 8;
-        drawSprite(assets.runnerRun, 8, 8, runFrame, 0, -drawSize / 2, -drawSize + 8, drawSize, drawSize);
+        // Row 0 has 4 running frames, synced to treadmill cadence
+        const runFrame = Math.floor(cadencePhase / (Math.PI / 2)) % 4;
+        drawSprite(assets.runnerRun, 4, 4, runFrame, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
         ctx.restore();
       } else if (!isMoving && assets.runnerIdle) {
         ctx.save();
         ctx.translate(runnerX, runnerRoadY - verticalBounce);
         ctx.rotate(-inclineAngle);
-        const drawSize = 88;
-        drawSprite(assets.runnerIdle, 8, 8, 0, 0, -drawSize / 2, -drawSize + 8, drawSize, drawSize);
+        // Row 0 has 4 gentle idle breathing frames
+        const idleFrame = Math.floor(windTime * 2) % 4;
+        drawSprite(assets.runnerIdle, 4, 4, idleFrame, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
         ctx.restore();
       } else {
         // Procedural vector runner fallback
