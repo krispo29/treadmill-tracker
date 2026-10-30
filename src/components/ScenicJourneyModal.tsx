@@ -575,12 +575,13 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const cloudScale = 0.8 + (i % 3) * 0.25;
 
         if (assets.bgCloud) {
-          const cw = 96 * cloudScale;
-          const ch = 72 * cloudScale;
+          const cw = 76 * cloudScale;
+          const ch = 52 * cloudScale;
           ctx.save();
           if (theme === 'night') ctx.globalAlpha = 0.45;
           else if (theme === 'sunset') ctx.globalAlpha = 0.85;
-          drawSprite(assets.bgCloud, 4, 4, i % 4, 0, cloudX, cloudY, cw, ch);
+          // In 8x8 grid (32x32 each cell): cell (0, 0) and (1, 0) are single complete fluffy pixel clouds!
+          drawSprite(assets.bgCloud, 8, 8, i % 2, 0, cloudX, cloudY, cw, ch);
           ctx.restore();
         } else {
           drawCloud(cloudX, cloudY, cloudScale);
@@ -588,135 +589,191 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }
 
       // ------------------------------------------
-      // 4. DISTANT MOUNTAINS / HILLS (Parallax Layer Mid-Far)
+      // 4. DISTANT MOUNTAINS & SACRED MOUNT FUJI
       // ------------------------------------------
-      const mountainY = height * 0.60;
+      const mountainY = height * 0.58;
 
-      // Atmospheric distant mountain base (prevents gaps)
-      ctx.fillStyle = theme === 'night'
-        ? '#13212D'
-        : theme === 'sunset'
-        ? '#8A4A48'
-        : theme === 'sakura'
-        ? '#C4D4E0' // Lavender mountain base
-        : '#B7CEBE'; // Sage mountain base
-      ctx.fillRect(-50, mountainY, width + 100, height - mountainY);
-
-      if (assets.bgMountains) {
-        // Pixel Art Mountain Silhouette Layer (Row 0 of 4, each 256x64)
-        const mWidth = 320;
-        const mHeight = 85;
-        const startX = -((farScroll * 0.8) % mWidth);
-        ctx.save();
-        if (theme === 'night') ctx.globalAlpha = 0.6;
-        for (let mx = startX - mWidth; mx < width + mWidth; mx += mWidth) {
-          drawSprite(assets.bgMountains, 1, 4, 0, 0, mx, mountainY - mHeight + 15, mWidth, mHeight);
-        }
-        ctx.restore();
-      } else {
-        // Procedural mountain fallback
-        ctx.fillStyle = theme === 'night'
-          ? '#192837'
-          : theme === 'sunset'
-          ? '#8A4A48'
-          : theme === 'sakura'
-          ? '#C4D4E0' // Lavender mountain
-          : '#B7CEBE'; // Sage mountain
-
-        ctx.beginPath();
-        ctx.moveTo(-50, height);
-        for (let x = -50; x <= width + 100; x += 120) {
-          const peakIdx = Math.floor((x + farScroll) / 240);
-          const peakH = 90 + Math.sin(peakIdx * 1.7) * 45;
-          ctx.lineTo(x, mountainY - peakH);
-          ctx.lineTo(x + 60, mountainY - 20);
-        }
-        ctx.lineTo(width + 100, height);
-        ctx.closePath();
-        ctx.fill();
-      }
-
-      // Fuji Peak Snow Cap (if Sakura theme)
-      // ------------------------------------------
-      const midHillY = height * 0.67;
-
-      if (theme === 'sakura') {
-        const fujiX = ((width * 0.45 - farScroll * 0.8) % (width + 400) + width + 400) % (width + 400) - 200;
-        if (assets.bgFuji) {
-          // Mount Fuji is 2x2 (128x128 each cell), base ends at maxY=112 out of 128
-          const fujiW = 220;
-          const fujiH = 175;
-          // Position so base is grounded behind mid-ground hills
-          drawSprite(assets.bgFuji, 2, 2, 0, 0, fujiX - fujiW / 2, midHillY - fujiH * (112 / 128) + 16, fujiW, fujiH);
-        } else {
-          const fujiY = mountainY - 140;
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.moveTo(fujiX - 80, fujiY + 60);
-          ctx.lineTo(fujiX, fujiY);
-          ctx.lineTo(fujiX + 80, fujiY + 60);
-          ctx.lineTo(fujiX + 50, fujiY + 50);
-          ctx.lineTo(fujiX + 20, fujiY + 62);
-          ctx.lineTo(fujiX - 15, fujiY + 52);
-          ctx.lineTo(fujiX - 45, fujiY + 60);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-
-      // ------------------------------------------
-      // 5. MID-GROUND ROLLING HILLS & COZY MEADOW GROUND
-      // ------------------------------------------
-      // Solid meadow fill from midHillY all the way down to road (eliminates any white gap!)
-      ctx.fillStyle = theme === 'night'
-        ? '#192C23'
-        : theme === 'sunset'
-        ? '#6B4031'
-        : theme === 'sakura'
-        ? '#779970' // Cozy matcha pasture
-        : '#5D7951'; // Rural grassy green
-
+      // Far Mountain Silhouette (Layer 1 - deep atmospheric haze)
+      const farMountainColor = theme === 'night' 
+        ? '#162232' 
+        : theme === 'sunset' 
+        ? '#6E3E40' 
+        : theme === 'sakura' 
+        ? '#CCD7E4' // Soft pastel lilac
+        : '#B4C9BC'; // Sage haze
+      
+      ctx.fillStyle = farMountainColor;
       ctx.beginPath();
       ctx.moveTo(-50, height);
-      ctx.lineTo(-50, midHillY);
-      for (let x = -50; x <= width + 100; x += 60) {
-        const hillOffset = Math.sin((x + midScroll) * 0.007) * 18;
-        ctx.lineTo(x, midHillY + hillOffset);
+      for (let x = -50; x <= width + 100; x += 30) {
+        const peak = Math.sin((x + farScroll * 0.4) * 0.003) * 65 
+                   + Math.cos((x + farScroll * 0.4) * 0.007) * 35;
+        ctx.lineTo(x, mountainY - 20 - peak);
       }
       ctx.lineTo(width + 100, height);
       ctx.closePath();
       ctx.fill();
 
-      if (assets.bgHills) {
-        // Pixel Art Rolling Green Hills (Row 2 of 4 has lush fenced hills, each 256x64)
-        const hillW = 320;
-        const hillH = 80;
-        const startHX = -((midScroll * 0.9) % hillW);
-        ctx.save();
-        if (theme === 'night') ctx.globalAlpha = 0.55;
-        for (let hx = startHX - hillW; hx < width + hillW; hx += hillW) {
-          drawSprite(assets.bgHills, 1, 4, 0, 2, hx, midHillY - hillH + 24, hillW, hillH);
-        }
-        ctx.restore();
-      } else {
-        // Procedural hills fallback
+      // Mid Mountain Ridge (Layer 2 - closer silhouette)
+      const midMountainColor = theme === 'night' 
+        ? '#1C2C3E' 
+        : theme === 'sunset' 
+        ? '#844D4D' 
+        : theme === 'sakura' 
+        ? '#BAC9D8' // Soft lavender
+        : '#9EB8A8';
+
+      ctx.fillStyle = midMountainColor;
+      ctx.beginPath();
+      ctx.moveTo(-50, height);
+      for (let x = -50; x <= width + 100; x += 25) {
+        const peak = Math.sin((x + farScroll * 0.75 + 150) * 0.0045) * 55 
+                   + Math.sin((x + farScroll * 0.75) * 0.011) * 22;
+        ctx.lineTo(x, mountainY + 15 - peak);
+      }
+      ctx.lineTo(width + 100, height);
+      ctx.closePath();
+      ctx.fill();
+
+      // Sacred Mount Fuji (Iconic Majestic Snow Peak in Sakura / Sunset / Night)
+      if (theme === 'sakura' || theme === 'sunset' || theme === 'night') {
+        const fujiX = ((width * 0.42 - farScroll * 0.6) % (width + 500) + width + 500) % (width + 500) - 150;
+        const fujiBaseY = height * 0.68;
+        const fujiPeakY = fujiBaseY - 145;
+        const fujiHalfW = 120;
+        const fujiPeakHalfW = 18;
+
+        // Fuji Volcanic Body (Soft Indigo / Sunset Plum)
         ctx.fillStyle = theme === 'night'
-          ? '#223847'
+          ? '#22354A'
           : theme === 'sunset'
-          ? '#A35E47'
-          : theme === 'sakura'
-          ? '#A8CCA8' // Soft sage green
-          : '#8FB495';
+          ? '#643846'
+          : '#7B8FA6'; // Japandi soft indigo
 
         ctx.beginPath();
-        ctx.moveTo(-50, height);
-        for (let x = -50; x <= width + 100; x += 80) {
-          const hillOffset = Math.sin((x + midScroll) * 0.008) * 35;
-          ctx.lineTo(x, midHillY + hillOffset);
-        }
-        ctx.lineTo(width + 100, height);
+        ctx.moveTo(fujiX - fujiHalfW, fujiBaseY);
+        // Exponential volcanic slope on left
+        ctx.quadraticCurveTo(fujiX - fujiHalfW * 0.4, fujiBaseY - 45, fujiX - fujiPeakHalfW, fujiPeakY);
+        // Crater rim
+        ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
+        // Exponential volcanic slope on right
+        ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
         ctx.closePath();
         ctx.fill();
+
+        // Shaded right flank (sunlight from top-left)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+        ctx.beginPath();
+        ctx.moveTo(fujiX, fujiPeakY);
+        ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
+        ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
+        ctx.lineTo(fujiX, fujiBaseY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Iconic Snow Cap with Jagged Crevasses
+        const snowY = fujiPeakY + 62;
+        ctx.fillStyle = theme === 'sunset' ? '#FEE4D8' : '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(fujiX - fujiPeakHalfW - 1, fujiPeakY);
+        ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
+        // Right side slope
+        ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
+        // Jagged snow crevasses along bottom of snowline
+        ctx.lineTo(fujiX + 32, snowY - 10);
+        ctx.lineTo(fujiX + 22, snowY + 14);
+        ctx.lineTo(fujiX + 12, snowY - 4);
+        ctx.lineTo(fujiX + 2, snowY + 18);
+        ctx.lineTo(fujiX - 8, snowY - 6);
+        ctx.lineTo(fujiX - 18, snowY + 12);
+        ctx.lineTo(fujiX - 28, snowY - 8);
+        ctx.lineTo(fujiX - 42, snowY);
+        // Left side slope
+        ctx.quadraticCurveTo(fujiX - 28, fujiPeakY + 30, fujiX - fujiPeakHalfW - 1, fujiPeakY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Shaded side of snow cap
+        ctx.fillStyle = theme === 'night' 
+          ? 'rgba(30, 45, 65, 0.35)' 
+          : theme === 'sunset' 
+          ? 'rgba(180, 80, 80, 0.22)' 
+          : 'rgba(180, 195, 215, 0.32)';
+        ctx.beginPath();
+        ctx.moveTo(fujiX, fujiPeakY);
+        ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
+        ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
+        ctx.lineTo(fujiX + 32, snowY - 10);
+        ctx.lineTo(fujiX + 22, snowY + 14);
+        ctx.lineTo(fujiX + 12, snowY - 4);
+        ctx.lineTo(fujiX + 2, snowY + 18);
+        ctx.lineTo(fujiX, snowY + 10);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // ------------------------------------------
+      // 5. MID-GROUND ROLLING GREEN HILLS & MEADOW
+      // ------------------------------------------
+      const midHillY = height * 0.67;
+
+      // Back Hill Layer (gentle olive-sage rolling hills)
+      const backHillColor = theme === 'night'
+        ? '#172720'
+        : theme === 'sunset'
+        ? '#6B4031'
+        : theme === 'sakura'
+        ? '#7FA37C' // Soft tea green
+        : '#6B8E67';
+
+      ctx.fillStyle = backHillColor;
+      ctx.beginPath();
+      ctx.moveTo(-50, height);
+      for (let x = -50; x <= width + 100; x += 30) {
+        const hWave = Math.sin((x + midScroll * 0.65) * 0.005) * 32 
+                    + Math.cos((x + midScroll * 0.65) * 0.012) * 14;
+        ctx.lineTo(x, midHillY - 18 + hWave);
+      }
+      ctx.lineTo(width + 100, height);
+      ctx.closePath();
+      ctx.fill();
+
+      // Front Meadow Layer (lush warm matcha grass leading down to road)
+      const frontMeadowColor = theme === 'night'
+        ? '#1E3229'
+        : theme === 'sunset'
+        ? '#7E4935'
+        : theme === 'sakura'
+        ? '#6B9068' // Lush matcha pasture
+        : '#597B55';
+
+      ctx.fillStyle = frontMeadowColor;
+      ctx.beginPath();
+      ctx.moveTo(-50, height);
+      for (let x = -50; x <= width + 100; x += 25) {
+        const hWave = Math.sin((x + midScroll * 1.0 + 80) * 0.0065) * 22 
+                    + Math.sin((x + midScroll * 1.0) * 0.015) * 8;
+        ctx.lineTo(x, midHillY + 12 + hWave);
+      }
+      ctx.lineTo(width + 100, height);
+      ctx.closePath();
+      ctx.fill();
+
+      // Little Pixel Grass Tufts & Wildflowers on the Meadow Crest
+      ctx.fillStyle = theme === 'night' ? '#2A4538' : '#A4C69E';
+      for (let i = 0; i < 18; i++) {
+        const gx = ((i * 110 - midScroll * 1.0) % (width + 200) + width + 200) % (width + 200) - 50;
+        const gy = midHillY + 12 + Math.sin((gx + midScroll * 1.0 + 80) * 0.0065) * 22;
+        // Grass tuft (3 small vertical pixel blades)
+        ctx.fillRect(gx, gy - 4, 2, 4);
+        ctx.fillRect(gx - 2, gy - 3, 2, 3);
+        ctx.fillRect(gx + 2, gy - 2, 2, 2);
+        // Occasional tiny wildflower dot (white or buttercup yellow)
+        if (i % 3 === 0) {
+          ctx.fillStyle = i % 2 === 0 ? '#FFFFFF' : '#FDE047';
+          ctx.fillRect(gx - 3, gy - 5, 2, 2);
+          ctx.fillStyle = theme === 'night' ? '#2A4538' : '#A4C69E';
+        }
       }
 
       // Windmill or Cozy House in Countryside
@@ -855,37 +912,24 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const t = (markerX - (-20)) / (width + 40);
           const markerY = roadLeftY + (roadRightY - roadLeftY) * t;
 
-          if (assets.propMilestone) {
-            // Milestone post is 4x4 (64x64 each cell), base at maxY=62
-            drawSprite(assets.propMilestone, 4, 4, 0, 0, markerX - 25, markerY - 48, 50, 50);
-          } else {
-            // Cute wooden milestone signpost fallback
-            ctx.fillStyle = '#8D6E63';
-            ctx.fillRect(markerX - 3, markerY - 32, 6, 32);
-            ctx.fillStyle = '#FFF8E1';
-            ctx.strokeStyle = '#5D4037';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.roundRect(markerX - 22, markerY - 48, 44, 20, 4);
-            ctx.fill();
-            ctx.stroke();
-          }
-
-          // Distance Badge Pill
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          // Cute wooden milestone signpost with carved banner
+          ctx.fillStyle = '#8D6E63';
+          ctx.fillRect(markerX - 3, markerY - 36, 6, 36);
+          ctx.fillStyle = '#FFF8E1';
           ctx.strokeStyle = '#5D4037';
-          ctx.lineWidth = 1.2;
+          ctx.lineWidth = 1.5;
           ctx.beginPath();
-          ctx.roundRect(markerX - 22, markerY - 56, 44, 16, 4);
+          ctx.roundRect(markerX - 22, markerY - 48, 44, 18, 4);
           ctx.fill();
           ctx.stroke();
 
+          // Distance Badge Pill
           ctx.fillStyle = '#3E2723';
-          ctx.font = 'bold 9px ui-monospace, monospace';
+          ctx.font = 'bold 10px ui-monospace, monospace';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           const distLabel = markerDist >= 1000 ? `${(markerDist / 1000).toFixed(1)}k` : `${markerDist}m`;
-          ctx.fillText(`🚩 ${distLabel}`, markerX, markerY - 48);
+          ctx.fillText(`🚩 ${distLabel}`, markerX, markerY - 39);
         }
       }
 
