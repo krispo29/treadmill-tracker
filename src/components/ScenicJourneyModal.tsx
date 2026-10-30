@@ -18,7 +18,7 @@ import {
   Tv,
   Clock
 } from 'lucide-react';
-import type { TreadmillMetrics, UserProfile } from '../types/treadmill';
+import type { TreadmillMetrics, UserProfile, WorkoutGoal } from '../types/treadmill';
 import { formatDuration, formatPace } from '../services/calculations';
 import { audioCoach } from '../services/audioCoach';
 
@@ -63,6 +63,7 @@ interface ScenicJourneyModalProps {
   onClose: () => void;
   metrics: TreadmillMetrics;
   activeProfile: UserProfile;
+  goal?: WorkoutGoal;
   onSetSpeed: (speed: number) => void;
   onSetIncline: (incline: number) => void;
   onStart: (speed?: number) => void;
@@ -88,6 +89,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   onClose,
   metrics,
   activeProfile,
+  goal,
   onSetSpeed,
   onSetIncline,
   onStart,
@@ -137,6 +139,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     windTime: number;
     smoothDistance: number;
     lastTime: number;
+    celebrationTimer: number;
     particles: Particle[];
   }>({
     groundScroll: 0,
@@ -148,6 +151,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     windTime: 0,
     smoothDistance: metrics.distanceMeters || 0,
     lastTime: 0,
+    celebrationTimer: 0,
     particles: [],
   });
 
@@ -307,6 +311,38 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     }
   }, [metrics.inclineLevel]);
 
+  // Cheerful Arpeggio Chime Fanfare on milestone reached (C5 -> E5 -> G5 -> C6)
+  const playCelebrationFanfare = () => {
+    if (!soundEnabled) return;
+    try {
+      if (!ambientAudioCtxRef.current) {
+        const AudioClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioClass) ambientAudioCtxRef.current = new AudioClass();
+      }
+      const ctx = ambientAudioCtxRef.current;
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (!ctx) return;
+
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+      const startTime = ctx.currentTime;
+      notes.forEach((freq, idx) => {
+        const noteStart = startTime + idx * 0.11;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, noteStart);
+        gain.gain.setValueAtTime(0.05, noteStart);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(noteStart);
+        osc.stop(noteStart + 0.3);
+      });
+    } catch {
+      // Audio context may fail if user hasn't interacted with document
+    }
+  };
+
   // Milestone banner check (every 500m / 0.5km)
   useEffect(() => {
     const currentKm = metrics.distanceMeters / 1000;
@@ -329,7 +365,13 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
       const landmarkMsg = landmarks[String(reachedHalfKm)] || `🚩 ถึงหลักกิโลเมตรที่ ${reachedHalfKm.toFixed(1)} km!`;
       setMilestoneToast(landmarkMsg);
-      if (soundEnabled) audioCoach.playIntervalChangeBeep();
+
+      // Trigger Joyful Pet Hop and floating celebration hearts in canvas
+      animStateRef.current.celebrationTimer = 4.0;
+      if (soundEnabled) {
+        playCelebrationFanfare();
+      }
+
       const timer = setTimeout(() => setMilestoneToast(null), 5000);
       return () => clearTimeout(timer);
     }
@@ -465,6 +507,12 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       state.lastTime = currentTime;
       state.windTime += dt;
       const windTime = state.windTime;
+
+      // Milestone celebration timer countdown
+      if (state.celebrationTimer > 0) {
+        state.celebrationTimer = Math.max(0, state.celebrationTimer - dt);
+      }
+      const isCelebrating = state.celebrationTimer > 0;
 
       const width = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
       const height = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
@@ -699,6 +747,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const fujiDrawY = fujiBaseY - fujiDrawH * 0.92;
 
         ctx.save();
+        if (theme === 'night') {
+          ctx.filter = 'brightness(0.68) saturate(0.85) hue-rotate(-10deg)';
+        } else if (theme === 'sunset') {
+          ctx.filter = 'brightness(0.95) saturate(1.15) hue-rotate(-8deg)';
+        }
         // Keep 100% solid opacity so no ghosting occurs behind mountains
         ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
         ctx.restore();
@@ -750,6 +803,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const mDrawH = 250;
         const startX = -((farScroll * 0.6) % mDrawW);
         ctx.save();
+        if (theme === 'night') {
+          ctx.filter = 'brightness(0.65) saturate(0.85) hue-rotate(-10deg)';
+        } else if (theme === 'sunset') {
+          ctx.filter = 'brightness(0.92) saturate(1.15) hue-rotate(-8deg)';
+        }
         // Overlap by 1px to guarantee zero seam gap (100% opaque!)
         for (let mx = startX - mDrawW; mx < width + mDrawW; mx += mDrawW - 1) {
           ctx.drawImage(assets.bgMountains, mx, mountainY - 145, mDrawW, mDrawH);
@@ -792,6 +850,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const hDrawH = 240;
         const startHX = -((midScroll * 1.0) % hDrawW);
         ctx.save();
+        if (theme === 'night') {
+          ctx.filter = 'brightness(0.58) saturate(0.85) hue-rotate(-5deg)';
+        } else if (theme === 'sunset') {
+          ctx.filter = 'brightness(0.92) saturate(1.12) hue-rotate(-5deg)';
+        }
         // Overlap by 1px to guarantee zero seam gap (100% opaque!)
         for (let hx = startHX - hDrawW; hx < width + hDrawW; hx += hDrawW - 1) {
           ctx.drawImage(assets.bgHills, hx, midHillY - 108, hDrawW, hDrawH);
@@ -982,6 +1045,17 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
             ctx.textBaseline = 'middle';
             const distLabel = markerDist >= 1000 ? `${(markerDist / 1000).toFixed(1)}k` : `${markerDist}m`;
             ctx.fillText(`🚩 ${distLabel}`, markerX, markerY - 39);
+
+            // Painted Road Slope Chevron if Incline > 0
+            if (metrics.inclineLevel > 0) {
+              ctx.save();
+              ctx.fillStyle = theme === 'night' ? 'rgba(255, 255, 255, 0.28)' : 'rgba(82, 121, 111, 0.45)';
+              ctx.font = 'bold 9px ui-monospace, monospace';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'top';
+              ctx.fillText(`▲ +${metrics.inclineLevel}`, markerX, markerY + 4);
+              ctx.restore();
+            }
           }
         }
       }
@@ -1186,6 +1260,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const petOffsetX = -44; // Runs slightly behind runner
         const petRoadY = roadLeftY + (roadRightY - roadLeftY) * (((runnerX + petOffsetX) - (-20)) / (width + 40));
         const petBounce = isMoving ? Math.abs(Math.sin(companionPhase)) * (bounceHeight * 0.8) : Math.sin(windTime * 2.5) * 1.2;
+        // Joyful pet hop bounce when reaching milestone
+        const petJoyBounce = isCelebrating ? Math.abs(Math.sin((4.0 - state.celebrationTimer) * 7)) * 14 : 0;
 
         // Pet Drop Shadow
         ctx.save();
@@ -1198,7 +1274,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.restore();
 
         ctx.save();
-        ctx.translate(runnerX + petOffsetX, petRoadY - petBounce);
+        ctx.translate(runnerX + petOffsetX, petRoadY - petBounce - petJoyBounce);
         ctx.rotate(-inclineAngle + (isMoving ? forwardLean * 0.7 : 0));
 
         // Pet sprite size (scaled to cute companion size ~44x44)
@@ -1354,6 +1430,23 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           ctx.fill();
         }
 
+        // Floating celebration hearts & sparkles above pet when milestone reached
+        if (isCelebrating) {
+          const cProgress = (4.0 - state.celebrationTimer) / 4.0;
+          for (let hi = 0; hi < 3; hi++) {
+            const hLife = ((cProgress * 2.5 + hi * 0.33) % 1.0);
+            const hAlpha = Math.sin(hLife * Math.PI);
+            const hY = petGroundDy - (hLife * 32) - 6;
+            const hX = Math.sin(cProgress * 8 + hi * 2) * 10;
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, Math.min(1, hAlpha));
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(hi % 2 === 0 ? '💖' : '✨', hX, hY);
+            ctx.restore();
+          }
+        }
+
         ctx.restore();
       }
 
@@ -1457,6 +1550,34 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     minute: '2-digit', 
     hour12: false 
   });
+
+  // Target distance from Goal or default 5.0 km (Phase 1)
+  const targetKm = (goal?.type === 'distance' && goal.target > 0)
+    ? goal.target
+    : (goal?.type === 'time' && goal.target > 0)
+    ? Math.max(1, Math.round((goal.target / 60) * (metrics.speedKmh > 0 ? metrics.speedKmh : 5.0) * 10) / 10)
+    : 5.0;
+
+  const currentKm = metrics.distanceMeters / 1000;
+  const progressPercent = Math.min(100, Math.max(0, (currentKm / targetKm) * 100));
+  const remainingKm = Math.max(0, targetKm - currentKm);
+  const remainingKmStr = remainingKm > 0 ? remainingKm.toFixed(2) : '0.00';
+  const targetKmLabel = goal?.title || `เป้าหมาย ${targetKm.toFixed(1)} km`;
+
+  // Companion emoji helper
+  const companionEmoji = companion === 'shiba' ? '🐕' : companion === 'cat' ? '🐱' : companion === 'bunny' ? '🐰' : null;
+
+  // Key milestones along the journey to mark on the progress track
+  const landmarkPins = [
+    { km: 0.5, label: 'ซุ้มกาแฟ', icon: '☕' },
+    { km: 1.0, label: 'สะพานซากุระ', icon: '🌸' },
+    { km: 1.5, label: 'หมู่บ้านชนบท', icon: '🏡' },
+    { km: 2.0, label: 'ทุ่งดอกไม้', icon: '🌾' },
+    { km: 2.5, label: 'จุดชมวิว', icon: '🏔️' },
+    { km: 3.0, label: 'ประตูโทริอิ', icon: '⛩️' },
+    { km: 4.0, label: 'ทะเลสาบ', icon: '🌊' },
+    { km: targetKm, label: 'เส้นชัย', icon: '🏁' },
+  ].filter((p, idx, arr) => p.km <= targetKm && (idx === arr.length - 1 || p.km < targetKm));
 
   return (
     <div 
@@ -1665,11 +1786,21 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         </div>
       </div>
 
-      {/* MILESTONE CELEBRATION TOAST */}
+      {/* MILESTONE CELEBRATION TOAST BANNER */}
       {milestoneToast && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-full bg-white/95 backdrop-blur-md border border-[#CDE0D3] shadow-cozy-lg text-[#3B664E] text-xs sm:text-sm font-bold flex items-center gap-2 animate-bounce">
-          <Sparkles className="w-4 h-4 text-[#B67A28]" />
-          <span>{milestoneToast}</span>
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-5 py-2.5 sm:px-6 sm:py-3 rounded-3xl bg-white/95 backdrop-blur-md border-2 border-[#E3B873] shadow-cozy-lg text-[#2C2621] text-xs sm:text-sm font-bold flex items-center gap-3 animate-in zoom-in-95 duration-200">
+          <div className="w-8 h-8 rounded-2xl bg-[#FDF6EA] border border-[#F0DFBE] flex items-center justify-center text-lg animate-bounce">
+            🎉
+          </div>
+          <div>
+            <div className="text-[10px] text-[#A66E22] uppercase tracking-wider font-extrabold flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-[#B67A28]" />
+              <span>พิชิตหลักกิโลเมตร!</span>
+            </div>
+            <div className="text-xs sm:text-sm font-black text-[#3B664E]">
+              {milestoneToast}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1743,6 +1874,75 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                 <span>{caloriesStr}</span>
               </span>
               <span className="text-[9px] text-[#8C827A]">kcal</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MINI JOURNEY PROGRESS BAR CARD (Phase 1) */}
+      <div className={`relative z-10 mx-auto max-w-4xl w-full px-4 pt-2 transition-all duration-300 pointer-events-none ${
+        zenMode ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'
+      }`}>
+        <div className="bg-white/85 backdrop-blur-md rounded-2xl px-3.5 py-2 sm:px-4 sm:py-2.5 border border-[#EDE6DC] shadow-cozy-sm pointer-events-auto">
+          {/* Top Info Row */}
+          <div className="flex items-center justify-between text-xs mb-1.5 font-bold text-[#2C2621]">
+            <div className="flex items-center gap-2">
+              <span className="text-[#3B664E] text-xs sm:text-sm">🚩</span>
+              <span className="text-[11px] sm:text-xs text-[#443830] font-bold">{targetKmLabel}</span>
+              {metrics.inclineLevel > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FDF2E9] text-[#C46849] border border-[#F6D8C6] text-[10px] font-extrabold shadow-cozy-sm">
+                  <Mountain className="w-2.5 h-2.5 text-[#C46849]" />
+                  <span>ชัน +{metrics.inclineLevel} (+{(metrics.inclineLevel * 0.8).toFixed(1)}%)</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 font-mono text-[11px] sm:text-xs text-[#3B664E]">
+              <span>{progressPercent.toFixed(0)}%</span>
+              <span className="text-[10px] text-[#8C827A] font-normal">
+                (เหลือ {remainingKmStr} km)
+              </span>
+            </div>
+          </div>
+
+          {/* The Progress Bar Track */}
+          <div className="relative h-2 sm:h-2.5 w-full bg-[#EAE3D9] rounded-full overflow-visible flex items-center my-1.5">
+            {/* Filled Progress Gradient */}
+            <div 
+              className="h-full rounded-full bg-gradient-to-r from-[#659B7D] via-[#52796F] to-[#3B664E] transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+
+            {/* Landmark Pins */}
+            {landmarkPins.map((lm, idx) => {
+              const isPassed = currentKm >= lm.km;
+              const posPercent = (lm.km / targetKm) * 100;
+              if (posPercent > 100) return null;
+              return (
+                <div 
+                  key={idx}
+                  className="absolute -top-1 sm:-top-1.5 -translate-x-1/2 flex flex-col items-center group cursor-pointer z-10"
+                  style={{ left: `${posPercent}%` }}
+                  title={`${lm.label} (${lm.km} km)`}
+                >
+                  <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] shadow-cozy-sm border transition-all ${
+                    isPassed 
+                      ? 'bg-[#EAF2EC] border-[#52796F] text-[#3B664E] scale-110' 
+                      : 'bg-white border-[#EDE6DC] text-[#8C827A] opacity-70'
+                  }`}>
+                    {lm.icon}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Runner + Pet Avatar Pin sliding along the track */}
+            <div 
+              className="absolute -top-3.5 sm:-top-4 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-[#FFFDF9] border border-[#52796F] shadow-cozy transition-all duration-300 pointer-events-none z-20"
+              style={{ left: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+            >
+              <span className="text-xs sm:text-sm">{activeProfile.avatar || '🏃‍♀️'}</span>
+              {companionEmoji && <span className="text-[10px]">{companionEmoji}</span>}
             </div>
           </div>
         </div>

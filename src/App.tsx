@@ -882,6 +882,7 @@ export const App: React.FC = () => {
         onClose={() => setIsScenicModalOpen(false)}
         metrics={metrics}
         activeProfile={activeProfile}
+        goal={goal}
         onSetSpeed={handleSetSpeed}
         onSetIncline={handleSetIncline}
         onStart={handleStartTreadmill}
