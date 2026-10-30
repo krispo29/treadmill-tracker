@@ -605,7 +605,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.fillStyle = farMountainBaseColor;
       ctx.fillRect(-50, mountainY, width + 100, height - mountainY);
 
-      // A. Sacred Mount Fuji (Renders in background BEHIND distant mountains & rolling hills)
+      // A. Sacred Mount Fuji (Iconic Majestic Snow Peak in Sakura / Sunset / Night)
       if (theme === 'sakura' || theme === 'sunset' || theme === 'night') {
         const fujiX = ((width * 0.42 - farScroll * 0.4) % (width + 500) + width + 500) % (width + 500) - 150;
         const fujiBaseY = height * 0.68;
@@ -620,9 +620,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const fujiDrawY = fujiBaseY - fujiDrawH * (405 / 512) + 20;
 
           ctx.save();
+          // Keep 100% opaque so no ghosting occurs, but apply subtle dark night tint if night theme
           if (theme === 'night') {
-            ctx.globalAlpha = 0.85;
-          } else if (theme === 'sunset') {
             ctx.globalAlpha = 0.95;
           }
           ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
@@ -670,14 +669,13 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }
 
       // B. Distant Mountain Ridge Layer (Seamless 1536x384 parallax strip in front of Fuji)
+      // Solid 100% opacity to completely block what is behind!
       if (assets.bgMountains) {
         const mDrawW = 1000;
         const mDrawH = 250;
         const startX = -((farScroll * 0.6) % mDrawW);
         ctx.save();
-        if (theme === 'night') ctx.globalAlpha = 0.85;
-        else if (theme === 'sunset') ctx.globalAlpha = 0.92;
-        // Overlap by 1px to guarantee zero seam gap
+        // Overlap by 1px to guarantee zero seam gap (100% opaque!)
         for (let mx = startX - mDrawW; mx < width + mDrawW; mx += mDrawW - 1) {
           ctx.drawImage(assets.bgMountains, mx, mountainY - 145, mDrawW, mDrawH);
         }
@@ -714,14 +712,12 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.fillRect(-50, midHillY, width + 100, height - midHillY);
 
       if (assets.bgHills) {
-        // Seamless Rolling Green Hills Layer (1536x384 strip)
+        // Seamless Rolling Green Hills Layer (1536x384 strip, 100% solid opacity)
         const hDrawW = 960;
         const hDrawH = 240;
         const startHX = -((midScroll * 1.0) % hDrawW);
         ctx.save();
-        if (theme === 'night') ctx.globalAlpha = 0.7;
-        else if (theme === 'sunset') ctx.globalAlpha = 0.9;
-        // Overlap by 1px to guarantee zero seam gap
+        // Overlap by 1px to guarantee zero seam gap (100% opaque!)
         for (let hx = startHX - hDrawW; hx < width + hDrawW; hx += hDrawW - 1) {
           ctx.drawImage(assets.bgHills, hx, midHillY - 108, hDrawW, hDrawH);
         }
