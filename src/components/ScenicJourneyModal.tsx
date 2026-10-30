@@ -129,6 +129,99 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     setIsAutoTheme(true);
   };
 
+  // Pixel Art Image Assets Preloader
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const assetsRef = useRef<{
+    runnerRun: HTMLImageElement | null;
+    runnerIdle: HTMLImageElement | null;
+    bgCloud: HTMLImageElement | null;
+    bgFuji: HTMLImageElement | null;
+    bgMountains: HTMLImageElement | null;
+    bgHills: HTMLImageElement | null;
+    bgSunSunset: HTMLImageElement | null;
+    landmarkCafe: HTMLImageElement | null;
+    landmarkSakuraTree: HTMLImageElement | null;
+    landmarkTorii: HTMLImageElement | null;
+    landmarkWindmill: HTMLImageElement | null;
+    propMilestone: HTMLImageElement | null;
+  }>({
+    runnerRun: null,
+    runnerIdle: null,
+    bgCloud: null,
+    bgFuji: null,
+    bgMountains: null,
+    bgHills: null,
+    bgSunSunset: null,
+    landmarkCafe: null,
+    landmarkSakuraTree: null,
+    landmarkTorii: null,
+    landmarkWindmill: null,
+    propMilestone: null,
+  });
+
+  useEffect(() => {
+    const loadImg = (src: string): Promise<HTMLImageElement | null> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+      });
+    };
+
+    const loadAllAssets = async () => {
+      try {
+        const [
+          runnerRun,
+          runnerIdle,
+          bgCloud,
+          bgFuji,
+          bgMountains,
+          bgHills,
+          bgSunSunset,
+          landmarkCafe,
+          landmarkSakuraTree,
+          landmarkTorii,
+          landmarkWindmill,
+          propMilestone,
+        ] = await Promise.all([
+          loadImg('/assets/scenic/runner-female-run.png'),
+          loadImg('/assets/scenic/runner-female-idle.png'),
+          loadImg('/assets/scenic/bg-cloud.png'),
+          loadImg('/assets/scenic/bg-mountain-fuji.png'),
+          loadImg('/assets/scenic/bg-mountains-distant.png'),
+          loadImg('/assets/scenic/bg-hills-green.png'),
+          loadImg('/assets/scenic/bg-sun-sunset.png'),
+          loadImg('/assets/scenic/landmark-cafe-kiosk.png'),
+          loadImg('/assets/scenic/landmark-sakura-tree.png'),
+          loadImg('/assets/scenic/landmark-torii-gate.png'),
+          loadImg('/assets/scenic/landmark-windmill.png'),
+          loadImg('/assets/scenic/prop-milestone-post.png'),
+        ]);
+
+        assetsRef.current = {
+          runnerRun,
+          runnerIdle,
+          bgCloud,
+          bgFuji,
+          bgMountains,
+          bgHills,
+          bgSunSunset,
+          landmarkCafe,
+          landmarkSakuraTree,
+          landmarkTorii,
+          landmarkWindmill,
+          propMilestone,
+        };
+        setAssetsLoaded(true);
+      } catch (err) {
+        console.warn('Failed to load some scenic assets:', err);
+      }
+    };
+
+    loadAllAssets();
+  }, []);
+
   // Target values for local quick controls
   const defaultStartSpeed = activeProfile?.defaultStartSpeed ?? 3.0;
   const [targetSpeed, setTargetSpeed] = useState<number>(() => metrics.speedKmh > 0 ? metrics.speedKmh : defaultStartSpeed);
@@ -290,6 +383,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
       const width = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
       const height = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+      const assets = assetsRef.current;
+      ctx.imageSmoothingEnabled = false;
 
       // Speed factor based on treadmill speed
       const speed = metrics.speedKmh;
@@ -382,20 +477,25 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       } else if (theme === 'sunset') {
         // Large Golden Setting Sun
         const sunX = width * 0.72;
-        const sunY = height * 0.42;
-        const sunGlow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 80);
+        const sunY = height * 0.40;
+        const sunGlow = ctx.createRadialGradient(sunX, sunY, 15, sunX, sunY, 90);
         sunGlow.addColorStop(0, 'rgba(255, 220, 150, 0.9)');
-        sunGlow.addColorStop(0.5, 'rgba(235, 120, 75, 0.4)');
+        sunGlow.addColorStop(0.5, 'rgba(235, 120, 75, 0.35)');
         sunGlow.addColorStop(1, 'rgba(235, 120, 75, 0)');
         ctx.fillStyle = sunGlow;
         ctx.beginPath();
-        ctx.arc(sunX, sunY, 80, 0, Math.PI * 2);
+        ctx.arc(sunX, sunY, 90, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#FFF2D6';
-        ctx.beginPath();
-        ctx.arc(sunX, sunY, 34, 0, Math.PI * 2);
-        ctx.fill();
+        if (assets.bgSunSunset) {
+          const sunSize = 100;
+          ctx.drawImage(assets.bgSunSunset, sunX - sunSize / 2, sunY - sunSize / 2, sunSize, sunSize);
+        } else {
+          ctx.fillStyle = '#FFF2D6';
+          ctx.beginPath();
+          ctx.arc(sunX, sunY, 34, 0, Math.PI * 2);
+          ctx.fill();
+        }
       } else {
         // Gentle Warm Morning Sun with Soft Halo
         const sunX = width * 0.78;
@@ -434,135 +534,183 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       };
 
       for (let i = 0; i < 4; i++) {
-        const cloudX = ((i * 320 - farScroll * 1.5) % (width + 200) + width + 200) % (width + 200) - 100;
-        const cloudY = height * (0.12 + (i % 2) * 0.1);
-        drawCloud(cloudX, cloudY, 0.8 + (i % 3) * 0.25);
+        const cloudX = ((i * 320 - farScroll * 1.5) % (width + 240) + width + 240) % (width + 240) - 100;
+        const cloudY = height * (0.08 + (i % 2) * 0.1);
+        const cloudScale = 0.8 + (i % 3) * 0.25;
+
+        if (assets.bgCloud) {
+          const cw = 96 * cloudScale;
+          const ch = 96 * cloudScale;
+          ctx.save();
+          if (theme === 'night') ctx.globalAlpha = 0.45;
+          else if (theme === 'sunset') ctx.globalAlpha = 0.85;
+          ctx.drawImage(assets.bgCloud, cloudX, cloudY, cw, ch);
+          ctx.restore();
+        } else {
+          drawCloud(cloudX, cloudY, cloudScale);
+        }
       }
 
       // ------------------------------------------
       // 4. DISTANT MOUNTAINS / HILLS (Parallax Layer Mid-Far)
       // ------------------------------------------
       const mountainY = height * 0.62;
-      ctx.fillStyle = theme === 'night'
-        ? '#192837'
-        : theme === 'sunset'
-        ? '#8A4A48'
-        : theme === 'sakura'
-        ? '#C4D4E0' // Lavender mountain
-        : '#B7CEBE'; // Sage mountain
 
-      ctx.beginPath();
-      ctx.moveTo(-50, height);
-      for (let x = -50; x <= width + 100; x += 120) {
-        const peakIdx = Math.floor((x + farScroll) / 240);
-        const peakH = 90 + Math.sin(peakIdx * 1.7) * 45;
-        ctx.lineTo(x, mountainY - peakH);
-        ctx.lineTo(x + 60, mountainY - 20);
+      if (assets.bgMountains) {
+        // Pixel Art Mountain Silhouette Layer
+        const mWidth = 280;
+        const mHeight = 140;
+        const startX = -((farScroll * 0.8) % mWidth);
+        ctx.save();
+        if (theme === 'night') ctx.globalAlpha = 0.6;
+        for (let mx = startX - mWidth; mx < width + mWidth; mx += mWidth) {
+          ctx.drawImage(assets.bgMountains, mx, mountainY - mHeight + 35, mWidth, mHeight);
+        }
+        ctx.restore();
+      } else {
+        // Procedural mountain fallback
+        ctx.fillStyle = theme === 'night'
+          ? '#192837'
+          : theme === 'sunset'
+          ? '#8A4A48'
+          : theme === 'sakura'
+          ? '#C4D4E0' // Lavender mountain
+          : '#B7CEBE'; // Sage mountain
+
+        ctx.beginPath();
+        ctx.moveTo(-50, height);
+        for (let x = -50; x <= width + 100; x += 120) {
+          const peakIdx = Math.floor((x + farScroll) / 240);
+          const peakH = 90 + Math.sin(peakIdx * 1.7) * 45;
+          ctx.lineTo(x, mountainY - peakH);
+          ctx.lineTo(x + 60, mountainY - 20);
+        }
+        ctx.lineTo(width + 100, height);
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.lineTo(width + 100, height);
-      ctx.closePath();
-      ctx.fill();
 
       // Fuji Peak Snow Cap (if Sakura theme)
       if (theme === 'sakura') {
         const fujiX = ((width * 0.45 - farScroll * 0.8) % (width + 400) + width + 400) % (width + 400) - 200;
-        const fujiY = mountainY - 140;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.moveTo(fujiX - 80, fujiY + 60);
-        ctx.lineTo(fujiX, fujiY);
-        ctx.lineTo(fujiX + 80, fujiY + 60);
-        ctx.lineTo(fujiX + 50, fujiY + 50);
-        ctx.lineTo(fujiX + 20, fujiY + 62);
-        ctx.lineTo(fujiX - 15, fujiY + 52);
-        ctx.lineTo(fujiX - 45, fujiY + 60);
-        ctx.closePath();
-        ctx.fill();
+        if (assets.bgFuji) {
+          const fujiSize = 190;
+          ctx.drawImage(assets.bgFuji, fujiX - fujiSize / 2, mountainY - fujiSize + 45, fujiSize, fujiSize);
+        } else {
+          const fujiY = mountainY - 140;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.moveTo(fujiX - 80, fujiY + 60);
+          ctx.lineTo(fujiX, fujiY);
+          ctx.lineTo(fujiX + 80, fujiY + 60);
+          ctx.lineTo(fujiX + 50, fujiY + 50);
+          ctx.lineTo(fujiX + 20, fujiY + 62);
+          ctx.lineTo(fujiX - 15, fujiY + 52);
+          ctx.lineTo(fujiX - 45, fujiY + 60);
+          ctx.closePath();
+          ctx.fill();
+        }
       }
 
       // ------------------------------------------
       // 5. MID-GROUND ROLLING HILLS & COZY CABINS / TREES
       // ------------------------------------------
       const midHillY = height * 0.70;
-      ctx.fillStyle = theme === 'night'
-        ? '#223847'
-        : theme === 'sunset'
-        ? '#A35E47'
-        : theme === 'sakura'
-        ? '#A8CCA8' // Soft sage green
-        : '#8FB495';
 
-      ctx.beginPath();
-      ctx.moveTo(-50, height);
-      for (let x = -50; x <= width + 100; x += 80) {
-        const hillOffset = Math.sin((x + midScroll) * 0.008) * 35;
-        ctx.lineTo(x, midHillY + hillOffset);
-      }
-      ctx.lineTo(width + 100, height);
-      ctx.closePath();
-      ctx.fill();
-
-      // Cozy trees & Japanese shrines / Cafe along mid-ground
-      const drawTree = (tx: number, ty: number, isSakura: boolean) => {
-        // Trunk
-        ctx.fillStyle = '#6E5646';
-        ctx.fillRect(tx - 3, ty, 6, 22);
-        // Foliage
-        if (isSakura) {
-          ctx.fillStyle = '#F4B6C2';
-          ctx.beginPath();
-          ctx.arc(tx, ty - 6, 18, 0, Math.PI * 2);
-          ctx.arc(tx - 10, ty - 2, 12, 0, Math.PI * 2);
-          ctx.arc(tx + 10, ty - 2, 14, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.fillStyle = theme === 'night' ? '#184236' : '#52796F';
-          ctx.beginPath();
-          ctx.moveTo(tx - 16, ty + 4);
-          ctx.lineTo(tx, ty - 24);
-          ctx.lineTo(tx + 16, ty + 4);
-          ctx.closePath();
-          ctx.fill();
+      if (assets.bgHills) {
+        // Pixel Art Rolling Green Hills
+        const hillW = 280;
+        const hillH = 140;
+        const startHX = -((midScroll * 0.9) % hillW);
+        ctx.save();
+        if (theme === 'night') ctx.globalAlpha = 0.55;
+        for (let hx = startHX - hillW; hx < width + hillW; hx += hillW) {
+          ctx.drawImage(assets.bgHills, hx, midHillY - hillH + 40, hillW, hillH);
         }
-      };
+        ctx.restore();
+      } else {
+        // Procedural hills fallback
+        ctx.fillStyle = theme === 'night'
+          ? '#223847'
+          : theme === 'sunset'
+          ? '#A35E47'
+          : theme === 'sakura'
+          ? '#A8CCA8' // Soft sage green
+          : '#8FB495';
 
-      for (let i = 0; i < 7; i++) {
-        const treeX = ((i * 240 - midScroll) % (width + 300) + width + 300) % (width + 300) - 50;
-        const treeY = midHillY + Math.sin((treeX + midScroll) * 0.008) * 35 - 18;
-        drawTree(treeX, treeY, theme === 'sakura');
+        ctx.beginPath();
+        ctx.moveTo(-50, height);
+        for (let x = -50; x <= width + 100; x += 80) {
+          const hillOffset = Math.sin((x + midScroll) * 0.008) * 35;
+          ctx.lineTo(x, midHillY + hillOffset);
+        }
+        ctx.lineTo(width + 100, height);
+        ctx.closePath();
+        ctx.fill();
       }
 
       // Windmill or Cozy House in Countryside
       if (theme === 'countryside') {
         const millX = ((width * 0.35 - midScroll) % (width + 600) + width + 600) % (width + 600) - 100;
-        const millY = midHillY - 30;
-        // Tower
-        ctx.fillStyle = '#FAF7F2';
-        ctx.beginPath();
-        ctx.moveTo(millX - 14, millY + 36);
-        ctx.lineTo(millX - 8, millY);
-        ctx.lineTo(millX + 8, millY);
-        ctx.lineTo(millX + 14, millY + 36);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#B67A28';
-        ctx.beginPath();
-        ctx.arc(millX, millY, 9, Math.PI, 0);
-        ctx.fill();
-        // Turning Blades
-        ctx.save();
-        ctx.translate(millX, millY);
-        ctx.rotate(windTime * 0.8);
-        ctx.strokeStyle = '#6E5646';
-        ctx.lineWidth = 2.5;
-        for (let b = 0; b < 4; b++) {
-          ctx.rotate(Math.PI / 2);
+        const millY = midHillY - 40;
+        if (assets.landmarkWindmill) {
+          ctx.drawImage(assets.landmarkWindmill, millX - 45, millY - 45, 90, 90);
+        } else {
+          // Tower
+          ctx.fillStyle = '#FAF7F2';
           ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(28, 0);
-          ctx.stroke();
+          ctx.moveTo(millX - 14, millY + 36);
+          ctx.lineTo(millX - 8, millY);
+          ctx.lineTo(millX + 8, millY);
+          ctx.lineTo(millX + 14, millY + 36);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#B67A28';
+          ctx.beginPath();
+          ctx.arc(millX, millY, 9, Math.PI, 0);
+          ctx.fill();
+          // Turning Blades
+          ctx.save();
+          ctx.translate(millX, millY);
+          ctx.rotate(windTime * 0.8);
+          ctx.strokeStyle = '#6E5646';
+          ctx.lineWidth = 2.5;
+          for (let b = 0; b < 4; b++) {
+            ctx.rotate(Math.PI / 2);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(28, 0);
+            ctx.stroke();
+          }
+          ctx.restore();
         }
-        ctx.restore();
+      }
+
+      // Sakura trees for sakura theme
+      if (theme === 'sakura') {
+        if (assets.landmarkSakuraTree) {
+          for (let i = 0; i < 4; i++) {
+            const treeX = ((i * 340 - midScroll) % (width + 400) + width + 400) % (width + 400) - 80;
+            const treeY = midHillY - 60;
+            ctx.drawImage(assets.landmarkSakuraTree, treeX - 45, treeY, 90, 90);
+          }
+        } else {
+          const drawTree = (tx: number, ty: number) => {
+            ctx.fillStyle = '#6E5646';
+            ctx.fillRect(tx - 3, ty, 6, 22);
+            ctx.fillStyle = '#F4B6C2';
+            ctx.beginPath();
+            ctx.arc(tx, ty - 6, 18, 0, Math.PI * 2);
+            ctx.arc(tx - 10, ty - 2, 12, 0, Math.PI * 2);
+            ctx.arc(tx + 10, ty - 2, 14, 0, Math.PI * 2);
+            ctx.fill();
+          };
+          for (let i = 0; i < 7; i++) {
+            const treeX = ((i * 240 - midScroll) % (width + 300) + width + 300) % (width + 300) - 50;
+            const treeY = midHillY + Math.sin((treeX + midScroll) * 0.008) * 35 - 18;
+            drawTree(treeX, treeY);
+          }
+        }
       }
 
       // ------------------------------------------
@@ -632,20 +780,32 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         const relativeDist = markerDist - currentDistanceMeters;
         // Map relative distance to screen X
         const markerX = width * 0.45 + relativeDist * 1.5;
-        if (markerX >= -40 && markerX <= width + 40) {
+        if (markerX >= -60 && markerX <= width + 60) {
           // Calculate Y on inclined road
           const t = (markerX - (-20)) / (width + 40);
           const markerY = roadLeftY + (roadRightY - roadLeftY) * t;
 
-          // Cute wooden milestone signpost
-          ctx.fillStyle = '#8D6E63';
-          ctx.fillRect(markerX - 3, markerY - 32, 6, 32);
-          // Sign board
-          ctx.fillStyle = '#FFF8E1';
+          if (assets.propMilestone) {
+            ctx.drawImage(assets.propMilestone, markerX - 25, markerY - 48, 50, 50);
+          } else {
+            // Cute wooden milestone signpost fallback
+            ctx.fillStyle = '#8D6E63';
+            ctx.fillRect(markerX - 3, markerY - 32, 6, 32);
+            ctx.fillStyle = '#FFF8E1';
+            ctx.strokeStyle = '#5D4037';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(markerX - 22, markerY - 48, 44, 20, 4);
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          // Distance Badge Pill
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
           ctx.strokeStyle = '#5D4037';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.2;
           ctx.beginPath();
-          ctx.roundRect(markerX - 22, markerY - 48, 44, 20, 4);
+          ctx.roundRect(markerX - 22, markerY - 56, 44, 16, 4);
           ctx.fill();
           ctx.stroke();
 
@@ -654,7 +814,31 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           const distLabel = markerDist >= 1000 ? `${(markerDist / 1000).toFixed(1)}k` : `${markerDist}m`;
-          ctx.fillText(`🚩 ${distLabel}`, markerX, markerY - 38);
+          ctx.fillText(`🚩 ${distLabel}`, markerX, markerY - 48);
+        }
+      }
+
+      // Cozy Roadside Cafe Kiosk (at 500m, 1500m, 2500m...)
+      if (assets.landmarkCafe) {
+        const cafeDist = Math.floor(currentDistanceMeters / 1000) * 1000 + 500;
+        const cafeRel = cafeDist - currentDistanceMeters;
+        const cafeX = width * 0.45 + cafeRel * 1.5;
+        if (cafeX >= -100 && cafeX <= width + 100) {
+          const t = (cafeX - (-20)) / (width + 40);
+          const cafeY = roadLeftY + (roadRightY - roadLeftY) * t;
+          ctx.drawImage(assets.landmarkCafe, cafeX - 45, cafeY - 82, 90, 90);
+        }
+      }
+
+      // Traditional Red Torii Gate (at 1000m, 3000m...)
+      if (assets.landmarkTorii && theme === 'sakura') {
+        const toriiDist = Math.floor(currentDistanceMeters / 2000) * 2000 + 1000;
+        const toriiRel = toriiDist - currentDistanceMeters;
+        const toriiX = width * 0.45 + toriiRel * 1.5;
+        if (toriiX >= -100 && toriiX <= width + 100) {
+          const t = (toriiX - (-20)) / (width + 40);
+          const toriiY = roadLeftY + (roadRightY - roadLeftY) * t;
+          ctx.drawImage(assets.landmarkTorii, toriiX - 45, toriiY - 90, 90, 90);
         }
       }
 
@@ -682,161 +866,139 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.restore();
 
       // ==========================================
-      // DRAW RUNNER (Anime / Cozy Japandi Style)
+      // DRAW RUNNER (Pixel Art Sprite from PixelLab or Vector Fallback)
       // ==========================================
-      ctx.save();
-      ctx.translate(runnerX, runnerRoadY - verticalBounce);
-      ctx.rotate(-inclineAngle + forwardLean);
+      const runnerSprite = isMoving ? assets.runnerRun : assets.runnerIdle;
 
-      const legSwing = isMoving ? Math.sin(cadencePhase) * (0.45 + Math.min(0.4, speed * 0.04)) : 0;
-      const armSwing = -legSwing; // arms swing opposite to legs
-
-      // Runner Color Palette (Cozy Sage & Oat)
-      const skinColor = '#FAD4C0';
-      const hairColor = '#3D2F28'; // Dark cozy brown
-      const topColor = '#52796F'; // Sage Green
-      const shortsColor = '#FAF7F2'; // Oat White shorts
-      const shoeColor = '#C46849'; // Terracotta sneakers
-
-      // Far Leg (Behind)
-      ctx.save();
-      ctx.translate(-4, -30);
-      ctx.rotate(-legSwing * 0.9);
-      ctx.fillStyle = '#405B54'; // Darker leg shadow
-      ctx.fillRect(-3, 0, 6, 18); // Thigh
-      ctx.translate(0, 18);
-      ctx.rotate(isMoving ? Math.max(0, legSwing * 1.2) : 0); // Knee bend
-      ctx.fillRect(-2.5, 0, 5, 16); // Shin
-      // Far Shoe
-      ctx.fillStyle = '#9C4E36';
-      ctx.beginPath();
-      ctx.roundRect(-3, 14, 14, 6, 2);
-      ctx.fill();
-      ctx.restore();
-
-      // Far Arm (Behind)
-      ctx.save();
-      ctx.translate(-2, -58);
-      ctx.rotate(-armSwing * 0.8);
-      ctx.strokeStyle = skinColor;
-      ctx.lineWidth = 4.5;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-6, 14);
-      ctx.lineTo(isMoving ? 8 : -2, 22);
-      ctx.stroke();
-      ctx.restore();
-
-      // Torso & Shorts
-      ctx.fillStyle = shortsColor;
-      ctx.beginPath();
-      ctx.roundRect(-7, -35, 14, 12, 3);
-      ctx.fill();
-
-      // Sporty Top
-      ctx.fillStyle = topColor;
-      ctx.beginPath();
-      ctx.roundRect(-8, -58, 16, 25, 4);
-      ctx.fill();
-
-      // Collar accent
-      ctx.fillStyle = '#FAF7F2';
-      ctx.beginPath();
-      ctx.arc(0, -56, 4, 0, Math.PI);
-      ctx.fill();
-
-      // Near Leg (Front)
-      ctx.save();
-      ctx.translate(4, -30);
-      ctx.rotate(legSwing);
-      ctx.fillStyle = skinColor;
-      ctx.fillRect(-3, 0, 6, 18); // Thigh
-      ctx.translate(0, 18);
-      ctx.rotate(isMoving ? Math.max(0, -legSwing * 1.2) : 0); // Knee bend
-      ctx.fillRect(-2.5, 0, 5, 16); // Shin
-      // Near Shoe
-      ctx.fillStyle = shoeColor;
-      ctx.beginPath();
-      ctx.roundRect(-3, 14, 15, 6, 2);
-      ctx.fill();
-      // White sole
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(-3, 18, 15, 2);
-      ctx.restore();
-
-      // Head & Neck
-      ctx.fillStyle = skinColor;
-      ctx.fillRect(-3, -64, 6, 7); // Neck
-      // Face
-      ctx.beginPath();
-      ctx.arc(0, -74, 11, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Friendly Face Details
-      ctx.fillStyle = '#3D2F28';
-      ctx.beginPath();
-      // Eye
-      ctx.arc(4, -75, 1.8, 0, Math.PI * 2);
-      ctx.fill();
-      // Smile / Breathing expression
-      if (isMoving) {
-        ctx.strokeStyle = '#3D2F28';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.arc(4, -71, 2.5, 0.1 * Math.PI, 0.9 * Math.PI);
-        ctx.stroke();
+      if (runnerSprite) {
+        ctx.save();
+        ctx.translate(runnerX, runnerRoadY - verticalBounce);
+        ctx.rotate(-inclineAngle + (isMoving ? forwardLean : 0));
+        // Pixel Art character (256x256 sprite drawn at 88x88 crisp)
+        const drawSize = 88;
+        ctx.drawImage(runnerSprite, -drawSize / 2, -drawSize + 8, drawSize, drawSize);
+        ctx.restore();
       } else {
-        // Relaxed smile
-        ctx.strokeStyle = '#3D2F28';
-        ctx.lineWidth = 1.2;
+        // Procedural vector runner fallback
+        ctx.save();
+        ctx.translate(runnerX, runnerRoadY - verticalBounce);
+        ctx.rotate(-inclineAngle + forwardLean);
+
+        const legSwing = isMoving ? Math.sin(cadencePhase) * (0.45 + Math.min(0.4, speed * 0.04)) : 0;
+        const armSwing = -legSwing; // arms swing opposite to legs
+
+        // Runner Color Palette (Cozy Sage & Oat)
+        const skinColor = '#FAD4C0';
+        const hairColor = '#3D2F28';
+        const topColor = '#52796F';
+        const shortsColor = '#FAF7F2';
+        const shoeColor = '#C46849';
+
+        // Far Leg (Behind)
+        ctx.save();
+        ctx.translate(-4, -30);
+        ctx.rotate(-legSwing * 0.9);
+        ctx.fillStyle = '#405B54';
+        ctx.fillRect(-3, 0, 6, 18);
+        ctx.translate(0, 18);
+        ctx.rotate(isMoving ? Math.max(0, legSwing * 1.2) : 0);
+        ctx.fillRect(-2.5, 0, 5, 16);
+        ctx.fillStyle = '#9C4E36';
         ctx.beginPath();
-        ctx.arc(3, -71, 3, 0.1 * Math.PI, 0.9 * Math.PI);
+        ctx.roundRect(-3, 14, 14, 6, 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Far Arm (Behind)
+        ctx.save();
+        ctx.translate(-2, -58);
+        ctx.rotate(-armSwing * 0.8);
+        ctx.strokeStyle = skinColor;
+        ctx.lineWidth = 4.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(isMoving ? 8 : -2, 22);
         ctx.stroke();
+        ctx.restore();
+
+        // Torso & Shorts
+        ctx.fillStyle = shortsColor;
+        ctx.beginPath();
+        ctx.roundRect(-7, -35, 14, 12, 3);
+        ctx.fill();
+
+        // Sporty Top
+        ctx.fillStyle = topColor;
+        ctx.beginPath();
+        ctx.roundRect(-8, -58, 16, 25, 4);
+        ctx.fill();
+
+        // Near Leg (Front)
+        ctx.save();
+        ctx.translate(4, -30);
+        ctx.rotate(legSwing);
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(-3, 0, 6, 18);
+        ctx.translate(0, 18);
+        ctx.rotate(isMoving ? Math.max(0, -legSwing * 1.2) : 0);
+        ctx.fillRect(-2.5, 0, 5, 16);
+        ctx.fillStyle = shoeColor;
+        ctx.beginPath();
+        ctx.roundRect(-3, 14, 15, 6, 2);
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(-3, 18, 15, 2);
+        ctx.restore();
+
+        // Head & Face
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(-3, -64, 6, 7);
+        ctx.beginPath();
+        ctx.arc(0, -74, 11, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#3D2F28';
+        ctx.beginPath();
+        ctx.arc(4, -75, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hair & Ponytail
+        ctx.fillStyle = hairColor;
+        ctx.beginPath();
+        ctx.arc(0, -77, 12, Math.PI * 0.8, Math.PI * 2.2);
+        ctx.fill();
+
+        const hairBounce = isMoving ? Math.sin(cadencePhase - 0.7) * 0.35 : Math.sin(windTime * 3) * 0.1;
+        ctx.save();
+        ctx.translate(-10, -78);
+        ctx.rotate(-0.4 + hairBounce);
+        ctx.beginPath();
+        ctx.ellipse(-10, 4, 14, 5, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#C46849';
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Near Arm
+        ctx.save();
+        ctx.translate(2, -56);
+        ctx.rotate(armSwing * 0.9);
+        ctx.strokeStyle = skinColor;
+        ctx.lineWidth = 4.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(isMoving ? 10 : 3, 14);
+        ctx.lineTo(isMoving ? 18 : 6, 8);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.restore();
       }
-
-      // Hair & Ponytail
-      ctx.fillStyle = hairColor;
-      // Head hair crown
-      ctx.beginPath();
-      ctx.arc(0, -77, 12, Math.PI * 0.8, Math.PI * 2.2);
-      ctx.fill();
-
-      // Ponytail with physics bounce lagging behind stride
-      const hairBounce = isMoving ? Math.sin(cadencePhase - 0.7) * 0.35 : Math.sin(windTime * 3) * 0.1;
-      ctx.save();
-      ctx.translate(-10, -78);
-      ctx.rotate(-0.4 + hairBounce);
-      ctx.beginPath();
-      ctx.ellipse(-10, 4, 14, 5, -0.3, 0, Math.PI * 2);
-      ctx.fill();
-      // Ponytail Ribbon / Scrunchie
-      ctx.fillStyle = '#C46849';
-      ctx.beginPath();
-      ctx.arc(0, 0, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      // Near Arm (Front)
-      ctx.save();
-      ctx.translate(2, -56);
-      ctx.rotate(armSwing * 0.9);
-      ctx.strokeStyle = skinColor;
-      ctx.lineWidth = 4.5;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(isMoving ? 10 : 3, 14);
-      ctx.lineTo(isMoving ? 18 : 6, 8); // Bent elbow pumping
-      ctx.stroke();
-      // Cute Sport Watch
-      ctx.fillStyle = '#52796F';
-      ctx.beginPath();
-      ctx.roundRect(isMoving ? 14 : 4, isMoving ? 9 : 14, 4, 3, 1);
-      ctx.fill();
-      ctx.restore();
-
-      ctx.restore(); // Finish runner transform
 
       // ==========================================
       // DRAW COMPANION ANIMAL (Shiba / Cat / Bunny)
@@ -1045,7 +1207,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
     };
-  }, [isOpen, theme, companion, metrics.speedKmh, metrics.inclineLevel, metrics.distanceMeters, soundEnabled]);
+  }, [isOpen, theme, companion, metrics.speedKmh, metrics.inclineLevel, metrics.distanceMeters, soundEnabled, assetsLoaded]);
 
   if (!isOpen) return null;
 
