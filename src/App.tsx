@@ -90,6 +90,8 @@ export const App: React.FC = () => {
   const maxInclineRef = useRef<number>(0);
   const wasRunningRef = useRef<boolean>(false);
   const autoSaveDebounceRef = useRef<boolean>(false);
+  const isSavingRef = useRef<boolean>(false);
+  const hasSavedCurrentSessionRef = useRef<boolean>(false);
 
   // Multi-Profile Management (100% Neon Database Driven - Zero Hardcode)
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
@@ -197,9 +199,10 @@ export const App: React.FC = () => {
         if (newMetrics.speedKmh > 0.5) {
           wasRunningRef.current = true;
           autoSaveDebounceRef.current = false;
+          hasSavedCurrentSessionRef.current = false;
         } else if (newMetrics.speedKmh <= 0.05 && wasRunningRef.current) {
           wasRunningRef.current = false;
-          if (!autoSaveDebounceRef.current && (newMetrics.elapsedSeconds >= 15 || newMetrics.distanceMeters >= 30)) {
+          if (!hasSavedCurrentSessionRef.current && !autoSaveDebounceRef.current && (newMetrics.elapsedSeconds >= 15 || newMetrics.distanceMeters >= 30)) {
             autoSaveDebounceRef.current = true;
             saveSessionRef.current('วิ่งจบเซสชั่น (Auto-saved)');
           }
@@ -326,6 +329,8 @@ export const App: React.FC = () => {
     maxInclineRef.current = 0;
     wasRunningRef.current = false;
     autoSaveDebounceRef.current = false;
+    isSavingRef.current = false;
+    hasSavedCurrentSessionRef.current = false;
     if (workoutState.program) {
       setWorkoutState((prev) => ({ ...prev, program: null, currentStepIndex: 0, stepElapsedSeconds: 0 }));
     }
@@ -397,9 +402,9 @@ export const App: React.FC = () => {
 
   const handleStopTreadmill = async () => {
     await bluetoothService.stopTreadmill();
-    // Auto-save session immediately when stopping belt (no need to manually press save)
-    if (metrics.elapsedSeconds >= 10 || metrics.distanceMeters >= 20) {
-      await saveSessionRecord('หยุดสายพาน (Auto-saved)');
+    // Auto-save session immediately when stopping belt (if not already saved)
+    if (!hasSavedCurrentSessionRef.current && (metrics.elapsedSeconds >= 10 || metrics.distanceMeters >= 20)) {
+      await saveSessionRecord('วิ่งจบเซสชั่น (Auto-saved)');
     }
   };
 
@@ -458,6 +463,10 @@ export const App: React.FC = () => {
 
   // Unified Save Workout function (saves to Neon DB tagged with active runner)
   const saveSessionRecord = async (reasonTitle?: string, isManual: boolean = false) => {
+    // Prevent duplicate saves: block concurrent or repeated saves for the same workout session
+    if (isSavingRef.current) return;
+    if (!isManual && hasSavedCurrentSessionRef.current) return;
+
     if (metrics.elapsedSeconds < 10 && metrics.distanceMeters < 20) {
       if (isManual) {
         alert('เวลาในการวิ่งสั้นเกินไป (ต้องมากกว่า 10 วินาที)');
@@ -465,55 +474,65 @@ export const App: React.FC = () => {
       return;
     }
 
+    isSavingRef.current = true;
+    hasSavedCurrentSessionRef.current = true;
+    autoSaveDebounceRef.current = true;
     setIsSaving(true);
-    const avgSpeed = metrics.elapsedSeconds > 0
-      ? (metrics.distanceMeters / 1000) / (metrics.elapsedSeconds / 3600)
-      : metrics.speedKmh;
 
-    const heightM = activeProfile.heightCm / 100;
-    const userBmi = heightM > 0 ? Number((activeProfile.weightKg / (heightM * heightM)).toFixed(1)) : undefined;
+    try {
+      const avgSpeed = metrics.elapsedSeconds > 0
+        ? (metrics.distanceMeters / 1000) / (metrics.elapsedSeconds / 3600)
+        : metrics.speedKmh;
 
-    const progTitle = workoutState.program?.title || reasonTitle || 'Free Running Session';
+      const heightM = activeProfile.heightCm / 100;
+      const userBmi = heightM > 0 ? Number((activeProfile.weightKg / (heightM * heightM)).toFixed(1)) : undefined;
 
-    const record: WorkoutRecord = {
-      id: `wo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      created_at: new Date().toISOString(),
-      program_name: progTitle,
-      duration_seconds: metrics.elapsedSeconds,
-      distance_meters: Math.round(metrics.distanceMeters),
-      calories_burned: Number(metrics.caloriesBurned.toFixed(1)),
-      elevation_gain_meters: Number(metrics.elevationGainMeters.toFixed(1)),
-      avg_speed_kmh: Number(avgSpeed.toFixed(1)),
-      max_speed_kmh: Number(Math.max(metrics.speedKmh, maxSpeedRef.current).toFixed(1)),
-      avg_incline: metrics.inclineLevel,
-      max_incline: Math.max(metrics.inclineLevel, maxInclineRef.current),
-      fat_grams_burned: Number(metrics.fatGramsBurned.toFixed(1)),
-      user_id: activeProfile.id,
-      user_name: activeProfile.name,
-      user_avatar: activeProfile.avatar,
-      user_weight_kg: activeProfile.weightKg,
-      user_height_cm: activeProfile.heightCm,
-      user_age: activeProfile.age,
-      user_gender: activeProfile.gender,
-      user_bmi: userBmi,
-    };
+      const progTitle = workoutState.program?.title || reasonTitle || 'Free Running Session';
 
-    await neonDatabase.saveWorkout(record);
-    setIsSaving(false);
+      const record: WorkoutRecord = {
+        id: `wo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        created_at: new Date().toISOString(),
+        program_name: progTitle,
+        duration_seconds: metrics.elapsedSeconds,
+        distance_meters: Math.round(metrics.distanceMeters),
+        calories_burned: Number(metrics.caloriesBurned.toFixed(1)),
+        elevation_gain_meters: Number(metrics.elevationGainMeters.toFixed(1)),
+        avg_speed_kmh: Number(avgSpeed.toFixed(1)),
+        max_speed_kmh: Number(Math.max(metrics.speedKmh, maxSpeedRef.current).toFixed(1)),
+        avg_incline: metrics.inclineLevel,
+        max_incline: Math.max(metrics.inclineLevel, maxInclineRef.current),
+        fat_grams_burned: Number(metrics.fatGramsBurned.toFixed(1)),
+        user_id: activeProfile.id,
+        user_name: activeProfile.name,
+        user_avatar: activeProfile.avatar,
+        user_weight_kg: activeProfile.weightKg,
+        user_height_cm: activeProfile.heightCm,
+        user_age: activeProfile.age,
+        user_gender: activeProfile.gender,
+        user_bmi: userBmi,
+      };
 
-    // Open Post-Workout Reward Celebration Recap Modal (Phase 3)
-    setLatestSavedRecord(record);
-    setIsRecapModalOpen(true);
-    setIsGiantHudOpen(false); // Close giant HUD so recap modal takes full focus
-    setIsScenicModalOpen(false);
+      await neonDatabase.saveWorkout(record);
 
-    const distKm = (metrics.distanceMeters / 1000).toFixed(2);
-    const timeFormatted = formatDuration(metrics.elapsedSeconds);
-    const kcal = Math.round(metrics.caloriesBurned);
-    const successText = `✅ บันทึกอัตโนมัติเรียบร้อย! (${activeProfile.name}: ${distKm} km | ${timeFormatted} | ${kcal} kcal)`;
+      // Open Post-Workout Reward Celebration Recap Modal (Phase 3)
+      setLatestSavedRecord(record);
+      setIsRecapModalOpen(true);
+      setIsGiantHudOpen(false); // Close giant HUD so recap modal takes full focus
+      setIsScenicModalOpen(false);
 
-    setSaveSuccessMsg(successText);
-    setTimeout(() => setSaveSuccessMsg(null), 5000);
+      const distKm = (metrics.distanceMeters / 1000).toFixed(2);
+      const timeFormatted = formatDuration(metrics.elapsedSeconds);
+      const kcal = Math.round(metrics.caloriesBurned);
+      const successText = `✅ บันทึกอัตโนมัติเรียบร้อย! (${activeProfile.name}: ${distKm} km | ${timeFormatted} | ${kcal} kcal)`;
+
+      setSaveSuccessMsg(successText);
+      setTimeout(() => setSaveSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error('Failed to save workout session:', err);
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
+    }
   };
 
   saveSessionRef.current = saveSessionRecord;
