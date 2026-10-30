@@ -685,64 +685,62 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.fillStyle = farMountainBaseColor;
       ctx.fillRect(-50, mountainY, width + 100, height - mountainY);
 
-      // A. Sacred Mount Fuji (Iconic Majestic Snow Peak in Sakura / Sunset / Night)
-      if (theme === 'sakura' || theme === 'sunset' || theme === 'night') {
-        const fujiX = ((width * 0.42 - farScroll * 0.4) % (width + 500) + width + 500) % (width + 500) - 150;
-        const fujiBaseY = height * 0.68;
+      // A. Sacred Mount Fuji (Iconic Majestic Snow Peak in all themes: Sakura, Countryside, Sunset, Night)
+      const fujiX = ((width * 0.42 - farScroll * 0.4) % (width + 500) + width + 500) % (width + 500) - 150;
+      const fujiBaseY = height * 0.68;
 
-        if (assets.bgFuji) {
-          // Dedicated tall & towering pixel art Mount Fuji
-          // Bounds: minY=102 (high summit), maxY=511 (base), height=409px
-          const fujiDrawW = 460;
-          const fujiDrawH = 460;
-          const fujiDrawX = fujiX - fujiDrawW / 2;
-          // Positioned so the summit towers dramatically high into the sky above distant mountains
-          const fujiDrawY = fujiBaseY - fujiDrawH * 0.92;
+      if (assets.bgFuji) {
+        // Dedicated tall & towering pixel art Mount Fuji
+        // Bounds: minY=102 (high summit), maxY=511 (base), height=409px
+        const fujiDrawW = 460;
+        const fujiDrawH = 460;
+        const fujiDrawX = fujiX - fujiDrawW / 2;
+        // Positioned so the summit towers dramatically high into the sky above distant mountains
+        const fujiDrawY = fujiBaseY - fujiDrawH * 0.92;
 
-          ctx.save();
-          // Keep 100% solid opacity so no ghosting occurs behind mountains
-          ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
-          ctx.restore();
-        } else {
-          // Procedural fallback Fuji
-          const fujiPeakY = fujiBaseY - 145;
-          const fujiHalfW = 120;
-          const fujiPeakHalfW = 18;
+        ctx.save();
+        // Keep 100% solid opacity so no ghosting occurs behind mountains
+        ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
+        ctx.restore();
+      } else {
+        // Procedural fallback Fuji
+        const fujiPeakY = fujiBaseY - 145;
+        const fujiHalfW = 120;
+        const fujiPeakHalfW = 18;
 
-          // Fuji Volcanic Body (Soft Indigo / Sunset Plum)
-          ctx.fillStyle = theme === 'night'
-            ? '#22354A'
-            : theme === 'sunset'
-            ? '#643846'
-            : '#7B8FA6'; // Japandi soft indigo
+        // Fuji Volcanic Body (Soft Indigo / Sunset Plum)
+        ctx.fillStyle = theme === 'night'
+          ? '#22354A'
+          : theme === 'sunset'
+          ? '#643846'
+          : '#7B8FA6'; // Japandi soft indigo
 
-          ctx.beginPath();
-          ctx.moveTo(fujiX - fujiHalfW, fujiBaseY);
-          ctx.quadraticCurveTo(fujiX - fujiHalfW * 0.4, fujiBaseY - 45, fujiX - fujiPeakHalfW, fujiPeakY);
-          ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
-          ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
-          ctx.closePath();
-          ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(fujiX - fujiHalfW, fujiBaseY);
+        ctx.quadraticCurveTo(fujiX - fujiHalfW * 0.4, fujiBaseY - 45, fujiX - fujiPeakHalfW, fujiPeakY);
+        ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
+        ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
+        ctx.closePath();
+        ctx.fill();
 
-          // Iconic Snow Cap
-          const snowY = fujiPeakY + 62;
-          ctx.fillStyle = theme === 'sunset' ? '#FEE4D8' : '#FFFFFF';
-          ctx.beginPath();
-          ctx.moveTo(fujiX - fujiPeakHalfW - 1, fujiPeakY);
-          ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
-          ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
-          ctx.lineTo(fujiX + 32, snowY - 10);
-          ctx.lineTo(fujiX + 22, snowY + 14);
-          ctx.lineTo(fujiX + 12, snowY - 4);
-          ctx.lineTo(fujiX + 2, snowY + 18);
-          ctx.lineTo(fujiX - 8, snowY - 6);
-          ctx.lineTo(fujiX - 18, snowY + 12);
-          ctx.lineTo(fujiX - 28, snowY - 8);
-          ctx.lineTo(fujiX - 42, snowY);
-          ctx.quadraticCurveTo(fujiX - 28, fujiPeakY + 30, fujiX - fujiPeakHalfW - 1, fujiPeakY);
-          ctx.closePath();
-          ctx.fill();
-        }
+        // Iconic Snow Cap
+        const snowY = fujiPeakY + 62;
+        ctx.fillStyle = theme === 'sunset' ? '#FEE4D8' : '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(fujiX - fujiPeakHalfW - 1, fujiPeakY);
+        ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
+        ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
+        ctx.lineTo(fujiX + 32, snowY - 10);
+        ctx.lineTo(fujiX + 22, snowY + 14);
+        ctx.lineTo(fujiX + 12, snowY - 4);
+        ctx.lineTo(fujiX + 2, snowY + 18);
+        ctx.lineTo(fujiX - 8, snowY - 6);
+        ctx.lineTo(fujiX - 18, snowY + 12);
+        ctx.lineTo(fujiX - 28, snowY - 8);
+        ctx.lineTo(fujiX - 42, snowY);
+        ctx.quadraticCurveTo(fujiX - 28, fujiPeakY + 30, fujiX - fujiPeakHalfW - 1, fujiPeakY);
+        ctx.closePath();
+        ctx.fill();
       }
 
       // B. Distant Mountain Ridge Layer (Seamless 1536x384 parallax strip in front of Fuji)
