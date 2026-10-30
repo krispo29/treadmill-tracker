@@ -145,6 +145,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     landmarkTorii: HTMLImageElement | null;
     landmarkWindmill: HTMLImageElement | null;
     propMilestone: HTMLImageElement | null;
+    petShiba: HTMLImageElement | null;
+    petCat: HTMLImageElement | null;
+    petBunny: HTMLImageElement | null;
   }>({
     runnerRun: null,
     runnerIdle: null,
@@ -159,6 +162,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     landmarkTorii: null,
     landmarkWindmill: null,
     propMilestone: null,
+    petShiba: null,
+    petCat: null,
+    petBunny: null,
   });
 
   useEffect(() => {
@@ -187,6 +193,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           landmarkTorii,
           landmarkWindmill,
           propMilestone,
+          petShiba,
+          petCat,
+          petBunny,
         ] = await Promise.all([
           loadImg('/assets/scenic/runner-female-run.png'),
           loadImg('/assets/scenic/runner-female-idle.png'),
@@ -201,6 +210,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           loadImg('/assets/scenic/landmark-torii-gate.png'),
           loadImg('/assets/scenic/landmark-windmill.png'),
           loadImg('/assets/scenic/prop-milestone-post.png'),
+          loadImg('/assets/scenic/pet-shiba-run.png'),
+          loadImg('/assets/scenic/pet-cat-run.png'),
+          loadImg('/assets/scenic/pet-bunny-hop.png'),
         ]);
 
         assetsRef.current = {
@@ -217,6 +229,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           landmarkTorii,
           landmarkWindmill,
           propMilestone,
+          petShiba,
+          petCat,
+          petBunny,
         };
         setAssetsLoaded(true);
       } catch (err) {
@@ -1127,8 +1142,24 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         ctx.translate(runnerX + petOffsetX, petRoadY - petBounce);
         ctx.rotate(-inclineAngle + (isMoving ? forwardLean * 0.7 : 0));
 
-        if (companion === 'shiba') {
-          // SHIBA INU (Golden-tan, curled tail, pointy ears)
+        // Pet sprite size (scaled to cute companion size ~44x44)
+        const petDrawSize = 44;
+        const petGroundDy = -petDrawSize * (27 / 32); // Feet on ground
+        const petFrame = isMoving 
+          ? Math.floor(companionPhase / (Math.PI / 2)) % 4 
+          : Math.floor(windTime * 2) % 4;
+
+        if (companion === 'shiba' && assets.petShiba) {
+          // Pixel Art Shiba Inu (8x8 grid of 32x32 cells, row 0 has run cycle)
+          drawSprite(assets.petShiba, 8, 8, petFrame, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+        } else if (companion === 'cat' && assets.petCat) {
+          // Pixel Art Cat (8x8 grid of 32x32 cells, row 0 has trot cycle)
+          drawSprite(assets.petCat, 8, 8, petFrame, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+        } else if (companion === 'bunny' && assets.petBunny) {
+          // Pixel Art Bunny (8x8 grid of 32x32 cells, row 0 has hop cycle)
+          drawSprite(assets.petBunny, 8, 8, petFrame, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+        } else if (companion === 'shiba') {
+          // SHIBA INU (Golden-tan, curled tail, pointy ears - fallback)
           const shibaGold = '#DE8C3B';
           const shibaWhite = '#FFFBF2';
 
