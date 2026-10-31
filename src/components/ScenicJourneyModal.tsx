@@ -322,6 +322,59 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     timestamp: number;
   } | null>(null);
 
+  // Stage Testing & Simulation Controls
+  const [showStageMenu, setShowStageMenu] = useState<boolean>(false);
+  const [simulatedSpeed, setSimulatedSpeed] = useState<number>(0);
+  const [previewStageId, setPreviewStageId] = useState<StageId | null>(null);
+  const [previewDistance, setPreviewDistance] = useState<number | null>(null);
+
+  const simulatedSpeedRef = useRef(simulatedSpeed);
+  const previewStageIdRef = useRef(previewStageId);
+  const previewDistanceRef = useRef(previewDistance);
+
+  useEffect(() => {
+    simulatedSpeedRef.current = simulatedSpeed;
+  }, [simulatedSpeed]);
+
+  useEffect(() => {
+    previewStageIdRef.current = previewStageId;
+  }, [previewStageId]);
+
+  useEffect(() => {
+    previewDistanceRef.current = previewDistance;
+  }, [previewDistance]);
+
+  const handleJumpToStage = (stageId: StageId) => {
+    const stageDistances: Record<StageId, number> = {
+      kamakura: 150,
+      kyoto: 2650,
+      hokkaido: 5200,
+      tokyo: 7700,
+    };
+    const dist = stageDistances[stageId];
+    setPreviewStageId(stageId);
+    setPreviewDistance(dist);
+    lastAcknowledgedStageRef.current = stageId;
+    const stageCfg = SCENIC_STAGES[stageId];
+    setActiveStageTransition({
+      stage: stageCfg,
+      timestamp: Date.now(),
+    });
+    if (soundEnabled) {
+      playSteamAchievementChime(ambientAudioCtxRef.current);
+    }
+    setTimeout(() => {
+      setActiveStageTransition((prev) => (prev?.stage.id === stageCfg.id ? null : prev));
+    }, 6000);
+  };
+
+  const handleResetToRealTreadmill = () => {
+    setPreviewStageId(null);
+    setPreviewDistance(metrics.distanceMeters);
+    setSimulatedSpeed(0);
+    lastAcknowledgedStageRef.current = getStageForDistance(metrics.distanceMeters);
+  };
+
   const handleDismissAchievement = (id: string) => {
     setAchievementQueue((prev) => prev.filter((item) => item.id !== id));
   };
@@ -1248,15 +1301,20 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       const assets = assetsRef.current;
       ctx.imageSmoothingEnabled = false;
 
-      // Speed factor based on treadmill speed
-      const speed = metrics.speedKmh;
+      // Speed factor based on treadmill speed or simulated test speed
+      const simSpeed = simulatedSpeedRef.current;
+      const speed = simSpeed > 0 ? simSpeed : metrics.speedKmh;
       const isMoving = speed > 0.15;
 
       // 1. Continuous Distance Tracking (Never freezes or teleports landmarks)
-      if (isMoving) {
+      if (previewDistanceRef.current !== null) {
+        state.smoothDistance = previewDistanceRef.current;
+        previewDistanceRef.current = null;
+      } else if (isMoving) {
         state.smoothDistance += (speed / 3.6) * dt;
       }
-      if (metrics.distanceMeters > 0) {
+
+      if (metrics.distanceMeters > 0 && simSpeed === 0 && previewStageIdRef.current === null) {
         const distDiff = metrics.distanceMeters - state.smoothDistance;
         if (Math.abs(distDiff) > 25) {
           state.smoothDistance = metrics.distanceMeters;
@@ -1478,7 +1536,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       // ------------------------------------------
       // 4. DISTANT MOUNTAINS & SACRED MOUNT FUJI / SKY LANDMARK
       // ------------------------------------------
-      const curStageId = getStageForDistance(currentDistanceMeters);
+      const curStageId = previewStageIdRef.current || getStageForDistance(currentDistanceMeters);
       const mountainY = height * 0.58;
 
       // Atmospheric distant mountain base fill
@@ -3013,29 +3071,135 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }`}>
         {/* Left: Stage Progress & Theme Switcher & Companion Picker */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Active Stage Indicator Badge */}
-          {(() => {
-            const activeStageId = getStageForDistance(metrics.distanceMeters);
-            const activeStage = SCENIC_STAGES[activeStageId];
-            return (
-              <button
-                type="button"
-                onClick={() => setShowGoshuinModal(true)}
-                className="flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#EDE6DC] hover:border-[#D4AF37] shadow-cozy-sm text-xs font-semibold cursor-pointer transition-all hover:scale-102 active:scale-98"
-                title={`เมืองปัจจุบัน: ${activeStage.name} (${activeStage.rangeKm}) • คลิกเพื่อดูสมุดตราประทับ`}
-              >
-                <div className="w-5 h-5 rounded-lg border border-[#C44536]/30 bg-[#FDF4F2] flex items-center justify-center overflow-hidden shrink-0">
-                  <img src={activeStage.stampSrc} alt={activeStage.name} className="w-4 h-4 object-contain" />
+          {/* Active Stage Indicator Badge & Stage Jump Popover */}
+          <div className="relative">
+            {(() => {
+              const activeStageId = previewStageId || getStageForDistance(metrics.distanceMeters);
+              const activeStage = SCENIC_STAGES[activeStageId];
+              return (
+                <button
+                  type="button"
+                  onClick={() => setShowStageMenu(!showStageMenu)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border backdrop-blur-md shadow-cozy-sm text-xs font-semibold cursor-pointer transition-all hover:scale-102 active:scale-98 ${
+                    showStageMenu
+                      ? 'bg-[#2C2621] text-white border-[#2C2621]'
+                      : 'bg-white/95 text-[#2C2621] border-[#EDE6DC] hover:border-[#D4AF37]'
+                  }`}
+                  title="คลิกเพื่อเลือกเมือง / ทดสอบด่านและจำลองการวิ่ง"
+                >
+                  <div className="w-5 h-5 rounded-lg border border-[#C44536]/30 bg-[#FDF4F2] flex items-center justify-center overflow-hidden shrink-0">
+                    <img src={activeStage.stampSrc} alt={activeStage.name} className="w-4 h-4 object-contain" />
+                  </div>
+                  <div className="flex items-center gap-1.5 text-left">
+                    <span className="font-black truncate max-w-[120px] sm:max-w-none">{activeStage.name}</span>
+                    <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded-full ${showStageMenu ? 'bg-white/20 text-white' : 'bg-[#F3EFE6] text-[#7A6E65]'}`}>
+                      {activeStage.rangeKm}
+                    </span>
+                  </div>
+                </button>
+              );
+            })()}
+
+            {/* Click-away backdrop */}
+            {showStageMenu && (
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowStageMenu(false)}
+              />
+            )}
+
+            {/* Stage Selector & Simulator Popover Menu */}
+            {showStageMenu && (
+              <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 p-4 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#EDE6DC] shadow-cozy-lg z-50 animate-in fade-in zoom-in-95 duration-150 space-y-3.5 text-[#2C2621]">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#F0EAE1]">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-[#C44536]">
+                    <span>🎌</span>
+                    <span>เลือกดูเมือง & ทดสอบด่าน (Stage Preview)</span>
+                  </div>
+                  <button
+                    onClick={() => setShowStageMenu(false)}
+                    className="text-[#8C827A] hover:text-[#2C2621] text-xs font-bold cursor-pointer px-1"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-black text-[#2C2621]">{activeStage.name}</span>
-                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-full bg-[#F3EFE6] text-[#7A6E65]">
-                    {activeStage.rangeKm}
-                  </span>
+
+                {/* 4 Stage Quick-Jump Cards */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.keys(SCENIC_STAGES) as StageId[]).map((sId) => {
+                    const stg = SCENIC_STAGES[sId];
+                    const isSelected = (previewStageId || getStageForDistance(metrics.distanceMeters)) === sId;
+                    return (
+                      <button
+                        key={sId}
+                        onClick={() => handleJumpToStage(sId)}
+                        className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-[#FAF7F2] border-[#C44536] shadow-cozy-sm ring-1 ring-[#C44536]'
+                            : 'bg-white/80 border-[#E8E1D5] hover:bg-[#FAF7F2] hover:border-[#D4AF37]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <img src={stg.stampSrc} alt={stg.name} className="w-6 h-6 object-contain" />
+                          <span className="text-[10px] font-mono font-bold text-[#8C827A] bg-[#F4EEE4] px-1.5 py-0.5 rounded-full">
+                            {stg.rangeKm.split(' ')[0]}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="text-xs font-black text-[#2C2621] line-clamp-1">{stg.name}</div>
+                          <div className="text-[10px] text-[#8C827A] line-clamp-1">{stg.tag}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </button>
-            );
-          })()}
+
+                {/* Simulated Walking & Jogging Toggle */}
+                <div className="pt-2 border-t border-[#F0EAE1] space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-[#443830] flex items-center gap-1">
+                      <span>🏃</span>
+                      <span>จำลองการวิ่ง (Demo Walking):</span>
+                    </span>
+                    <span className="font-mono text-xs font-black text-[#3B664E]">
+                      {simulatedSpeed > 0 ? `${simulatedSpeed.toFixed(1)} km/h` : 'ปิดอยู่'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { label: 'หยุดนิ่ง', spd: 0 },
+                      { label: 'เดิน 4 km/h', spd: 4.0 },
+                      { label: 'วิ่ง 7 km/h', spd: 7.0 },
+                    ].map((btn) => (
+                      <button
+                        key={btn.spd}
+                        onClick={() => setSimulatedSpeed(btn.spd)}
+                        className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          simulatedSpeed === btn.spd
+                            ? 'bg-[#3B664E] text-white shadow-cozy-sm'
+                            : 'bg-[#F4EEE4] text-[#7A6E65] hover:bg-[#EAE3D9]'
+                        }`}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Reset to Treadmill Real Distance */}
+                  {previewStageId && (
+                    <button
+                      onClick={handleResetToRealTreadmill}
+                      className="w-full mt-1 py-1.5 rounded-xl bg-white border border-[#E0D8CB] hover:bg-[#FAF7F2] text-[11px] font-bold text-[#8C827A] hover:text-[#2C2621] transition-all cursor-pointer text-center"
+                    >
+                      ↺ กลับสู่ระยะทางจริงบนลู่วิ่ง
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Theme Selector with Real-World Time Auto-Sync */}
           <div className="flex items-center gap-1 bg-white/90 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-[#EDE6DC] shadow-cozy-sm text-xs font-medium">
