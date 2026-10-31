@@ -201,7 +201,11 @@ export const ScenicGoshuinModal: React.FC<ScenicGoshuinModalProps> = ({
                         <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl border-2 border-[#C44536] bg-[#FDF4F2] flex items-center justify-center relative shadow-sm rotate-[-2deg]">
                           {/* Inner double border for authentic Japanese Inkan stamp look */}
                           <div className="absolute inset-1 border border-[#C44536]/40 rounded-xl pointer-events-none" />
-                          <span className="text-2xl sm:text-3xl filter drop-shadow-sm">{item.icon}</span>
+                          {item.customStampImg ? (
+                            <img src={item.customStampImg} alt={item.title} className="w-10 h-10 object-contain filter drop-shadow-sm" />
+                          ) : (
+                            <span className="text-2xl sm:text-3xl filter drop-shadow-sm">{item.icon}</span>
+                          )}
                           <span className="absolute -bottom-1 -right-1 text-[8px] font-black px-1 rounded bg-[#C44536] text-white">
                             済
                           </span>

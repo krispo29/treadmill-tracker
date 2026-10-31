@@ -19,6 +19,7 @@ export interface AchievementItem {
   category: AchievementCategory;
   tier: AchievementTier;
   foodBadge?: FoodBurnItem;
+  customStampImg?: string;
   checkUnlock: (metrics: TreadmillMetrics, sessionState: ScenicSessionState) => boolean;
 }
 
@@ -32,6 +33,9 @@ export interface ScenicSessionState {
   encounteredDeer?: boolean;
   encounteredLantern?: boolean;
   encounteredTrain?: boolean;
+  encounteredTanuki?: boolean;
+  encounteredCow?: boolean;
+  encounteredMailboxCat?: boolean;
 }
 
 export interface UnlockedAchievementRecord {
@@ -281,6 +285,65 @@ export const ACHIEVEMENT_CATALOG: AchievementItem[] = [
     category: 'secret',
     tier: 'silver',
     checkUnlock: (_, s) => !!s.encounteredTrain,
+  },
+  // --- STAGE & GOSHUIN SEALS (2.5km / 5.0km / 7.5km) ---
+  {
+    id: 'stage_kyoto',
+    title: 'ตราประทับเกียวโต อาราชิยามะ ⛩️',
+    description: 'เดินทางทะลุ 2.5 km ก้าวสู่เมืองโบราณ ป่าไผ่ และสะพานไม้เกียวโต',
+    icon: '⛩️',
+    category: 'distance',
+    tier: 'silver',
+    customStampImg: '/assets/scenic/stamp-kyoto-arashiyama.png',
+    checkUnlock: (m) => m.distanceMeters >= 2500,
+  },
+  {
+    id: 'stage_hokkaido',
+    title: 'ตราประทับฮอกไกโด บิเอะ 🌸',
+    description: 'เดินทางทะลุ 5.0 km สู่ทุ่งดอกลาเวนเดอร์และขุนเขาหิมะฮอกไกโด',
+    icon: '🌸',
+    category: 'distance',
+    tier: 'gold',
+    customStampImg: '/assets/scenic/stamp-hokkaido-biei.png',
+    checkUnlock: (m) => m.distanceMeters >= 5000,
+  },
+  {
+    id: 'stage_tokyo',
+    title: 'ตราประทับโตเกียว ชินจูกุ 🏙️',
+    description: 'เดินทางทะลุ 7.5 km สู่แสงไฟนีออนอบอุ่นและโตเกียวทาวเวอร์ยามราตรี',
+    icon: '🏙️',
+    category: 'distance',
+    tier: 'platinum',
+    customStampImg: '/assets/scenic/stamp-tokyo-shinjuku.png',
+    checkUnlock: (m) => m.distanceMeters >= 7500,
+  },
+  // --- NEW STAGE ENCOUNTERS ---
+  {
+    id: 'encounter_tanuki',
+    title: 'พรทานูกิผู้พิทักษ์ 🍃',
+    description: 'พบภูติทานูกิสวมหมวกฟางโบกม้วนคัมภีร์ให้กำลังใจในป่าไผ่เกียวโต',
+    icon: '🍃',
+    category: 'secret',
+    tier: 'bronze',
+    checkUnlock: (_, s) => !!s.encounteredTanuki,
+  },
+  {
+    id: 'encounter_cow',
+    title: 'มิตรภาพฟาร์มฮอกไกโด 🐮',
+    description: 'ทักทายลูกวัวนมน่ารักคาบดอกเดซี่แห่งทุ่งหญ้าบิเอะฮอกไกโด',
+    icon: '🐮',
+    category: 'secret',
+    tier: 'bronze',
+    checkUnlock: (_, s) => !!s.encounteredCow,
+  },
+  {
+    id: 'encounter_mailbox_cat',
+    title: 'แมวดำนำโชคแห่งโตเกียว 🐈‍⬛',
+    description: 'พบแมวดำผูกผ้าพันคอเชียร์วิ่งบนตู้ไปรษณีย์แดงเรโทรชินจูกุ',
+    icon: '🐈‍⬛',
+    category: 'secret',
+    tier: 'bronze',
+    checkUnlock: (_, s) => !!s.encounteredMailboxCat,
   },
 ];
 

@@ -44,6 +44,69 @@ export type ScenicTheme = 'sakura' | 'countryside' | 'sunset' | 'night';
 export type ScenicWeather = 'clear' | 'rain' | 'mist' | 'autumn';
 export type CompanionType = 'shiba' | 'cat' | 'bunny' | 'none';
 
+export type StageId = 'kamakura' | 'kyoto' | 'hokkaido' | 'tokyo';
+
+export interface StageConfig {
+  id: StageId;
+  name: string;
+  nameEn: string;
+  rangeKm: string;
+  accent: string;
+  tag: string;
+  description: string;
+  stampSrc: string;
+}
+
+export const SCENIC_STAGES: Record<StageId, StageConfig> = {
+  kamakura: {
+    id: 'kamakura',
+    name: 'คามาคุระ & ชายฝั่งโชนัน',
+    nameEn: 'Kamakura Coastal',
+    rangeKm: '0.0 - 2.5 km',
+    accent: '#3B664E',
+    tag: '🌊 เลียบหาด & ภูเขาไฟฟูจิ',
+    description: 'เส้นทางเลียบหาด รับลมทะเลสดชื่น ชมวิวฟูจิซังและรถไฟโบราณ Enoden',
+    stampSrc: '/assets/scenic/prop-milestone-post.png',
+  },
+  kyoto: {
+    id: 'kyoto',
+    name: 'เกียวโต อาราชิยามะ',
+    nameEn: 'Kyoto Arashiyama',
+    rangeKm: '2.5 - 5.0 km',
+    accent: '#B85737',
+    tag: '⛩️ ป่าไผ่ & ใบไม้เปลี่ยนสี',
+    description: 'ข้ามสู่เมืองเก่า ร่มรื่นด้วยป่าไผ่ ซุ้มประตูศาลเจ้า และภูติทานูกิ',
+    stampSrc: '/assets/scenic/stamp-kyoto-arashiyama.png',
+  },
+  hokkaido: {
+    id: 'hokkaido',
+    name: 'ฮอกไกโด บิเอะ',
+    nameEn: 'Hokkaido Biei',
+    rangeKm: '5.0 - 7.5 km',
+    accent: '#6E5296',
+    tag: '🌸 ทุ่งลาเวนเดอร์ & ขุนเขาหิมะ',
+    description: 'เนินเขาดอกไม้หลากสีสดชื่น เทือกเขาหิมะไกลสุดตา และฟาร์มโคนม',
+    stampSrc: '/assets/scenic/stamp-hokkaido-biei.png',
+  },
+  tokyo: {
+    id: 'tokyo',
+    name: 'มหานครโตเกียว เรโทร',
+    nameEn: 'Neo-Tokyo Twilight',
+    rangeKm: '7.5 - 10.0+ km',
+    accent: '#D97706',
+    tag: '🏙️ โตเกียวทาวเวอร์ & ราเมนยาไต',
+    description: 'แสงไฟนีออนอบอุ่นยามค่ำคืน ตู้กดน้ำสว่างไสว กลิ่นราเมนฉลองเข้าเส้นชัย',
+    stampSrc: '/assets/scenic/stamp-tokyo-shinjuku.png',
+  },
+};
+
+export const getStageForDistance = (distanceMeters: number): StageId => {
+  if (distanceMeters >= 7500) return 'tokyo';
+  if (distanceMeters >= 5000) return 'hokkaido';
+  if (distanceMeters >= 2500) return 'kyoto';
+  return 'kamakura';
+};
+
 /**
  * Automatically determine the scenic theme according to the real-world local time:
  * - 06:00 - 10:59: Sakura Morning (ซากุระ ยามเช้าสดชื่น)
@@ -244,10 +307,20 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const [postcardBlob, setPostcardBlob] = useState<Blob | null>(null);
   const [postcardFileName, setPostcardFileName] = useState<string>('');
 
-  // Phase 2: Roadside Encounters Tracking Refs
+  // Phase 2 & 5: Roadside Encounters Tracking Refs
   const encounteredDeerRef = useRef<boolean>(false);
   const encounteredLanternRef = useRef<boolean>(false);
   const encounteredTrainRef = useRef<boolean>(false);
+  const encounteredTanukiRef = useRef<boolean>(false);
+  const encounteredCowRef = useRef<boolean>(false);
+  const encounteredMailboxCatRef = useRef<boolean>(false);
+
+  // Stage Tracking & Celebratory Announcement (Kamakura -> Kyoto -> Hokkaido -> Tokyo)
+  const lastAcknowledgedStageRef = useRef<StageId>(getStageForDistance(metrics.distanceMeters || 0));
+  const [activeStageTransition, setActiveStageTransition] = useState<{
+    stage: StageConfig;
+    timestamp: number;
+  } | null>(null);
 
   const handleDismissAchievement = (id: string) => {
     setAchievementQueue((prev) => prev.filter((item) => item.id !== id));
@@ -408,9 +481,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
       pctx.fillStyle = '#7A6E65';
       pctx.font = '500 13px ui-sans-serif, system-ui, sans-serif';
+      const curStageCfg = SCENIC_STAGES[getStageForDistance(metrics.distanceMeters)];
       const themeThLabel = theme === 'sakura' ? 'ซากุระสปริง' : theme === 'countryside' ? 'ชนบทอบอุ่น' : theme === 'sunset' ? 'ตะวันตกดิน' : 'ราตรีใต้แสงดาว';
       const companionThLabel = companion === 'shiba' ? '🐕 ชิบะ' : companion === 'cat' ? '🐈 แมวส้ม' : companion === 'bunny' ? '🐇 กระต่าย' : '🏃‍♀️ วิ่งเดี่ยว';
-      pctx.fillText(`เส้นทาง: ${themeThLabel}  •  เพื่อนร่วมทาง: ${companionThLabel}  •  โดย ${activeProfile.name || 'Athlete'}`, 55, metaBaseY + 36);
+      pctx.fillText(`เส้นทาง: ${curStageCfg.name} (${curStageCfg.rangeKm})  •  บรรยากาศ: ${themeThLabel}  •  เพื่อนร่วมทาง: ${companionThLabel}  •  โดย ${activeProfile.name || 'Athlete'}`, 55, metaBaseY + 36);
 
       const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       pctx.fillStyle = '#A0958B';
@@ -611,6 +685,24 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     encounterLantern: HTMLImageElement | null;
     encounterTrain: HTMLImageElement | null;
     encounterUmbrella: HTMLImageElement | null;
+    // Stage 2: Kyoto Arashiyama
+    bgKyotoBamboo: HTMLImageElement | null;
+    bgKyotoPagoda: HTMLImageElement | null;
+    landmarkKyotoGate: HTMLImageElement | null;
+    encounterTanuki: HTMLImageElement | null;
+    stampKyoto: HTMLImageElement | null;
+    // Stage 3: Hokkaido Biei
+    bgHokkaidoSnow: HTMLImageElement | null;
+    bgHokkaidoLavender: HTMLImageElement | null;
+    landmarkHokkaidoBarn: HTMLImageElement | null;
+    encounterHokkaidoCow: HTMLImageElement | null;
+    stampHokkaido: HTMLImageElement | null;
+    // Stage 4: Neo-Tokyo Twilight
+    bgTokyoTower: HTMLImageElement | null;
+    bgTokyoSkyline: HTMLImageElement | null;
+    landmarkTokyoYatai: HTMLImageElement | null;
+    encounterTokyoCat: HTMLImageElement | null;
+    stampTokyo: HTMLImageElement | null;
   }>({
     runnerRun: null,
     runnerIdle: null,
@@ -632,6 +724,21 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     encounterLantern: null,
     encounterTrain: null,
     encounterUmbrella: null,
+    bgKyotoBamboo: null,
+    bgKyotoPagoda: null,
+    landmarkKyotoGate: null,
+    encounterTanuki: null,
+    stampKyoto: null,
+    bgHokkaidoSnow: null,
+    bgHokkaidoLavender: null,
+    landmarkHokkaidoBarn: null,
+    encounterHokkaidoCow: null,
+    stampHokkaido: null,
+    bgTokyoTower: null,
+    bgTokyoSkyline: null,
+    landmarkTokyoYatai: null,
+    encounterTokyoCat: null,
+    stampTokyo: null,
   });
 
   useEffect(() => {
@@ -667,6 +774,21 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           encounterLantern,
           encounterTrain,
           encounterUmbrella,
+          bgKyotoBamboo,
+          bgKyotoPagoda,
+          landmarkKyotoGate,
+          encounterTanuki,
+          stampKyoto,
+          bgHokkaidoSnow,
+          bgHokkaidoLavender,
+          landmarkHokkaidoBarn,
+          encounterHokkaidoCow,
+          stampHokkaido,
+          bgTokyoTower,
+          bgTokyoSkyline,
+          landmarkTokyoYatai,
+          encounterTokyoCat,
+          stampTokyo,
         ] = await Promise.all([
           loadImg('/assets/scenic/runner-female-run.png'),
           loadImg('/assets/scenic/runner-female-idle.png'),
@@ -688,6 +810,21 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           loadImg('/assets/scenic/encounter-lantern.png'),
           loadImg('/assets/scenic/encounter-train.png'),
           loadImg('/assets/scenic/encounter-umbrella.png'),
+          loadImg('/assets/scenic/bg-hills-kyoto-bamboo.png'),
+          loadImg('/assets/scenic/bg-landmark-kyoto-pagoda.png'),
+          loadImg('/assets/scenic/landmark-kyoto-shrine-gate.png'),
+          loadImg('/assets/scenic/encounter-tanuki-spirit.png'),
+          loadImg('/assets/scenic/stamp-kyoto-arashiyama.png'),
+          loadImg('/assets/scenic/bg-mountains-hokkaido-snow.png'),
+          loadImg('/assets/scenic/bg-hills-hokkaido-lavender.png'),
+          loadImg('/assets/scenic/landmark-hokkaido-barn-windmill.png'),
+          loadImg('/assets/scenic/encounter-hokkaido-cow.png'),
+          loadImg('/assets/scenic/stamp-hokkaido-biei.png'),
+          loadImg('/assets/scenic/bg-landmark-tokyo-tower.png'),
+          loadImg('/assets/scenic/bg-skyline-tokyo-retro.png'),
+          loadImg('/assets/scenic/landmark-tokyo-yatai-ramen.png'),
+          loadImg('/assets/scenic/encounter-tokyo-mailbox-cat.png'),
+          loadImg('/assets/scenic/stamp-tokyo-shinjuku.png'),
         ]);
 
         assetsRef.current = {
@@ -711,6 +848,21 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           encounterLantern,
           encounterTrain,
           encounterUmbrella,
+          bgKyotoBamboo,
+          bgKyotoPagoda,
+          landmarkKyotoGate,
+          encounterTanuki,
+          stampKyoto,
+          bgHokkaidoSnow,
+          bgHokkaidoLavender,
+          landmarkHokkaidoBarn,
+          encounterHokkaidoCow,
+          stampHokkaido,
+          bgTokyoTower,
+          bgTokyoSkyline,
+          landmarkTokyoYatai,
+          encounterTokyoCat,
+          stampTokyo,
         };
         setAssetsLoaded(true);
       } catch (err) {
@@ -791,12 +943,22 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         '1': '🌸 ข้ามสะพานไม้ธารน้ำซากุระ (1.0 km)',
         '1.5': '🏡 ผ่านหมู่บ้านชนบทอันเงียบสงบ (1.5 km)',
         '2': '🌾 ทุ่งดอกไม้บานสะพรั่ง (2.0 km)',
-        '2.5': '🏔️ จุดชมวิวเทือกเขาไกลลิบ (2.5 km)',
-        '3': '⛩️ ซุ้มประตูโทริอิกลางป่า (3.0 km)',
-        '3.5': '🌲 แนวป่าสนหอมสดชื่น (3.5 km)',
-        '4': '🌊 ริมทะเลสาบสะท้อนประกายแดด (4.0 km)',
-        '4.5': '🍃 สวนสมุนไพรอบอุ่น (4.5 km)',
-        '5': '🏆 พิชิตเป้าหมาย 5.0 KM สุดยอดมาก!'
+        '2.5': '⛩️ ข้ามสู่ดินแดนเก่าแก่: เกียวโต อาราชิยามะ (2.5 km)',
+        '3': '🎋 ป่าไผ่เขียวขจีและซุ้มประตูศาลเจ้า (3.0 km)',
+        '3.5': '🍃 กลิ่นอายบ้านไม้โบราณมาจิยะ (3.5 km)',
+        '4': '🦌 สวนกวางและตะเกียงหินโบราณ (4.0 km)',
+        '4.5': '🍵 ซุ้มชาเขียวมัทฉะเกียวโต (4.5 km)',
+        '5': '🌸 ข้ามสู่แดนสวรรค์: ฮอกไกโด ทุ่งดอกไม้บิเอะ (5.0 km)',
+        '5.5': '🌾 ทุ่งลาเวนเดอร์สีม่วงทอดยาว (5.5 km)',
+        '6': '🐄 โรงนาโบราณและฟาร์มโคนมฮอกไกโด (6.0 km)',
+        '6.5': '🏔️ วิวเทือกเขาหิมะไดเซ็ตสึซัง (6.5 km)',
+        '7': '🌻 เนินเขาดอกทานตะวันสีทอง (7.0 km)',
+        '7.5': '🏙️ ข้ามสู่มหานครนีออน: โตเกียวเรโทรยามราตรี (7.5 km)',
+        '8': '🏮 ร้านราเมนรถเข็นยาไตส่งควันหอม (8.0 km)',
+        '8.5': '🗼 แสงไฟอบอุ่นโตเกียวทาวเวอร์ (8.5 km)',
+        '9': '🎶 บรรยากาศ Lo-Fi Citypop คืนที่งดงาม (9.0 km)',
+        '9.5': '🐈‍⬛ ตู้ไปรษณีย์แดงเรโทรชินจูกุ (9.5 km)',
+        '10': '🏆 พิชิต 10.0 KM มหานครโตเกียวสมบูรณ์แบบ!'
       };
 
       const landmarkMsg = landmarks[String(reachedHalfKm)] || `🚩 ถึงหลักกิโลเมตรที่ ${reachedHalfKm.toFixed(1)} km!`;
@@ -831,7 +993,32 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       encounteredDeer: encounteredDeerRef.current,
       encounteredLantern: encounteredLanternRef.current,
       encounteredTrain: encounteredTrainRef.current,
+      encounteredTanuki: encounteredTanukiRef.current,
+      encounteredCow: encounteredCowRef.current,
+      encounteredMailboxCat: encounteredMailboxCatRef.current,
     };
+
+    // Stage Transition Check (Kamakura -> Kyoto -> Hokkaido -> Tokyo)
+    const currentStageId = getStageForDistance(metrics.distanceMeters);
+    if (currentStageId !== lastAcknowledgedStageRef.current) {
+      lastAcknowledgedStageRef.current = currentStageId;
+      const stageCfg = SCENIC_STAGES[currentStageId];
+      setActiveStageTransition({
+        stage: stageCfg,
+        timestamp: Date.now(),
+      });
+      if (soundEnabled) {
+        playSteamAchievementChime(ambientAudioCtxRef.current);
+      }
+      try {
+        audioCoach.speak(`เข้าสู่เส้นทาง ${stageCfg.name}`);
+      } catch {}
+
+      // Auto dismiss after 6.5 seconds
+      setTimeout(() => {
+        setActiveStageTransition((prev) => (prev?.stage.id === stageCfg.id ? null : prev));
+      }, 6500);
+    }
 
     const newlyUnlocked: AchievementItem[] = [];
 
@@ -1289,110 +1476,105 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       }
 
       // ------------------------------------------
-      // 4. DISTANT MOUNTAINS & SACRED MOUNT FUJI
+      // 4. DISTANT MOUNTAINS & SACRED MOUNT FUJI / SKY LANDMARK
       // ------------------------------------------
+      const curStageId = getStageForDistance(currentDistanceMeters);
       const mountainY = height * 0.58;
 
       // Atmospheric distant mountain base fill
-      const farMountainBaseColor = theme === 'night' 
-        ? '#162232' 
-        : theme === 'sunset' 
-        ? '#6E3E40' 
-        : theme === 'sakura' 
-        ? '#C2C8DE' // Soft pastel lilac base
-        : '#B4C9BC'; // Sage haze
+      const farMountainBaseColor = curStageId === 'tokyo'
+        ? (theme === 'night' ? '#141829' : '#312B45')
+        : curStageId === 'kyoto'
+        ? (theme === 'night' ? '#181A22' : '#73574A')
+        : curStageId === 'hokkaido'
+        ? (theme === 'night' ? '#151D2A' : '#9EB5C7')
+        : (theme === 'night' ? '#162232' : theme === 'sunset' ? '#6E3E40' : theme === 'sakura' ? '#C2C8DE' : '#B4C9BC');
       ctx.fillStyle = farMountainBaseColor;
       ctx.fillRect(-50, mountainY, width + 100, height - mountainY);
 
-      // A. Sacred Mount Fuji (Iconic Majestic Snow Peak in all themes: Sakura, Countryside, Sunset, Night)
-      const fujiX = ((width * 0.42 - farScroll * 0.4) % (width + 500) + width + 500) % (width + 500) - 150;
-      const fujiBaseY = height * 0.68;
+      // A. Distant Sky Landmark (Fuji / Kyoto Pagoda / Tokyo Tower)
+      const skyLandmarkX = ((width * 0.42 - farScroll * 0.4) % (width + 500) + width + 500) % (width + 500) - 150;
+      const skyLandmarkBaseY = height * 0.68;
 
-      if (assets.bgFuji) {
-        // Dedicated tall & towering pixel art Mount Fuji
-        // Bounds: minY=102 (high summit), maxY=511 (base), height=409px
-        const fujiDrawW = 460;
-        const fujiDrawH = 460;
-        const fujiDrawX = fujiX - fujiDrawW / 2;
-        // Positioned so the summit towers dramatically high into the sky above distant mountains
-        const fujiDrawY = fujiBaseY - fujiDrawH * 0.92;
+      if (curStageId === 'kamakura') {
+        if (assets.bgFuji) {
+          const fujiDrawW = 460;
+          const fujiDrawH = 460;
+          const fujiDrawX = skyLandmarkX - fujiDrawW / 2;
+          const fujiDrawY = skyLandmarkBaseY - fujiDrawH * 0.92;
 
-        ctx.save();
-        if (theme === 'night') {
-          ctx.filter = 'brightness(0.68) saturate(0.85) hue-rotate(-10deg)';
-        } else if (theme === 'sunset') {
-          ctx.filter = 'brightness(0.95) saturate(1.15) hue-rotate(-8deg)';
-        }
-        // Keep 100% solid opacity so no ghosting occurs behind mountains
-        ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
-
-        // Phase 2: Diamond Shimmer on Mount Fuji's Snowy Summit
-        const shimmerT = (windTime * 1.2) % 7.0;
-        if (shimmerT < 1.0) {
-          const sProgress = shimmerT / 1.0;
-          const sAlpha = Math.sin(sProgress * Math.PI) * (theme === 'night' ? 0.7 : 0.95);
-          const sX = fujiDrawX + fujiDrawW * 0.48;
-          const sY = fujiDrawY + fujiDrawH * 0.22;
           ctx.save();
-          ctx.fillStyle = theme === 'night' ? `rgba(200, 230, 255, ${sAlpha})` : `rgba(255, 255, 255, ${sAlpha})`;
-          ctx.beginPath();
-          ctx.arc(sX, sY, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-          // 4-point sparkle cross
-          ctx.strokeStyle = theme === 'night' ? `rgba(200, 230, 255, ${sAlpha * 0.8})` : `rgba(255, 255, 255, ${sAlpha * 0.8})`;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(sX - 7, sY); ctx.lineTo(sX + 7, sY);
-          ctx.moveTo(sX, sY - 7); ctx.lineTo(sX, sY + 7);
-          ctx.stroke();
+          if (theme === 'night') {
+            ctx.filter = 'brightness(0.68) saturate(0.85) hue-rotate(-10deg)';
+          } else if (theme === 'sunset') {
+            ctx.filter = 'brightness(0.95) saturate(1.15) hue-rotate(-8deg)';
+          }
+          ctx.drawImage(assets.bgFuji, fujiDrawX, fujiDrawY, fujiDrawW, fujiDrawH);
+
+          // Phase 2: Diamond Shimmer on Mount Fuji's Snowy Summit
+          const shimmerT = (windTime * 1.2) % 7.0;
+          if (shimmerT < 1.0) {
+            const sProgress = shimmerT / 1.0;
+            const sAlpha = Math.sin(sProgress * Math.PI) * (theme === 'night' ? 0.7 : 0.95);
+            const sX = fujiDrawX + fujiDrawW * 0.48;
+            const sY = fujiDrawY + fujiDrawH * 0.22;
+            ctx.save();
+            ctx.fillStyle = theme === 'night' ? `rgba(200, 230, 255, ${sAlpha})` : `rgba(255, 255, 255, ${sAlpha})`;
+            ctx.beginPath();
+            ctx.arc(sX, sY, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = theme === 'night' ? `rgba(200, 230, 255, ${sAlpha * 0.8})` : `rgba(255, 255, 255, ${sAlpha * 0.8})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(sX - 7, sY); ctx.lineTo(sX + 7, sY);
+            ctx.moveTo(sX, sY - 7); ctx.lineTo(sX, sY + 7);
+            ctx.stroke();
+            ctx.restore();
+          }
           ctx.restore();
         }
+      } else if (curStageId === 'kyoto') {
+        if (assets.bgKyotoPagoda) {
+          const pagodaW = 340;
+          const pagodaH = 354;
+          const pagodaX = skyLandmarkX - pagodaW / 2;
+          const pagodaY = skyLandmarkBaseY - pagodaH * 0.88;
+          ctx.save();
+          if (theme === 'night') {
+            ctx.filter = 'brightness(0.68) saturate(0.85) hue-rotate(-10deg)';
+          } else if (theme === 'sunset') {
+            ctx.filter = 'brightness(0.95) saturate(1.15) hue-rotate(-8deg)';
+          }
+          ctx.drawImage(assets.bgKyotoPagoda, pagodaX, pagodaY, pagodaW, pagodaH);
+          ctx.restore();
+        }
+      } else if (curStageId === 'tokyo') {
+        if (assets.bgTokyoTower) {
+          const towerW = 210;
+          const towerH = 415;
+          const towerX = skyLandmarkX - towerW / 2;
+          const towerY = skyLandmarkBaseY - towerH * 0.95;
+          ctx.save();
+          const haloGrad = ctx.createRadialGradient(towerX + towerW / 2, towerY + towerH * 0.35, 10, towerX + towerW / 2, towerY + towerH * 0.35, 120);
+          haloGrad.addColorStop(0, 'rgba(255, 160, 60, 0.28)');
+          haloGrad.addColorStop(1, 'rgba(255, 120, 30, 0)');
+          ctx.fillStyle = haloGrad;
+          ctx.beginPath();
+          ctx.arc(towerX + towerW / 2, towerY + towerH * 0.35, 120, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.restore();
-      } else {
-        // Procedural fallback Fuji
-        const fujiPeakY = fujiBaseY - 145;
-        const fujiHalfW = 120;
-        const fujiPeakHalfW = 18;
-
-        // Fuji Volcanic Body (Soft Indigo / Sunset Plum)
-        ctx.fillStyle = theme === 'night'
-          ? '#22354A'
-          : theme === 'sunset'
-          ? '#643846'
-          : '#7B8FA6'; // Japandi soft indigo
-
-        ctx.beginPath();
-        ctx.moveTo(fujiX - fujiHalfW, fujiBaseY);
-        ctx.quadraticCurveTo(fujiX - fujiHalfW * 0.4, fujiBaseY - 45, fujiX - fujiPeakHalfW, fujiPeakY);
-        ctx.lineTo(fujiX + fujiPeakHalfW, fujiPeakY);
-        ctx.quadraticCurveTo(fujiX + fujiHalfW * 0.4, fujiBaseY - 45, fujiX + fujiHalfW, fujiBaseY);
-        ctx.closePath();
-        ctx.fill();
-
-        // Iconic Snow Cap
-        const snowY = fujiPeakY + 62;
-        ctx.fillStyle = theme === 'sunset' ? '#FEE4D8' : '#FFFFFF';
-        ctx.beginPath();
-        ctx.moveTo(fujiX - fujiPeakHalfW - 1, fujiPeakY);
-        ctx.lineTo(fujiX + fujiPeakHalfW + 1, fujiPeakY);
-        ctx.quadraticCurveTo(fujiX + 28, fujiPeakY + 30, fujiX + 42, snowY);
-        ctx.lineTo(fujiX + 32, snowY - 10);
-        ctx.lineTo(fujiX + 22, snowY + 14);
-        ctx.lineTo(fujiX + 12, snowY - 4);
-        ctx.lineTo(fujiX + 2, snowY + 18);
-        ctx.lineTo(fujiX - 8, snowY - 6);
-        ctx.lineTo(fujiX - 18, snowY + 12);
-        ctx.lineTo(fujiX - 28, snowY - 8);
-        ctx.lineTo(fujiX - 42, snowY);
-        ctx.quadraticCurveTo(fujiX - 28, fujiPeakY + 30, fujiX - fujiPeakHalfW - 1, fujiPeakY);
-        ctx.closePath();
-        ctx.fill();
+          ctx.drawImage(assets.bgTokyoTower, towerX, towerY, towerW, towerH);
+          ctx.restore();
+        }
       }
 
       // B. Distant Mountain Ridge Layer (Seamless 1536x384 parallax strip in front of Fuji)
       // Solid 100% opacity to completely block what is behind!
-      if (assets.bgMountains) {
+      const curMountainImg = curStageId === 'hokkaido'
+        ? (assets.bgHokkaidoSnow || assets.bgMountains)
+        : assets.bgMountains;
+
+      if (curMountainImg) {
         const mDrawW = 1000;
         const mDrawH = 250;
         const startX = -((farScroll * 0.6) % mDrawW);
@@ -1404,22 +1586,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         }
         // Overlap by 1px to guarantee zero seam gap (100% opaque!)
         for (let mx = startX - mDrawW; mx < width + mDrawW; mx += mDrawW - 1) {
-          ctx.drawImage(assets.bgMountains, mx, mountainY - 145, mDrawW, mDrawH);
+          ctx.drawImage(curMountainImg, mx, mountainY - 145, mDrawW, mDrawH);
         }
         ctx.restore();
-      } else {
-        // Procedural mountain fallback
-        ctx.fillStyle = farMountainBaseColor;
-        ctx.beginPath();
-        ctx.moveTo(-50, height);
-        for (let x = -50; x <= width + 100; x += 30) {
-          const peak = Math.sin((x + farScroll * 0.4) * 0.003) * 65 
-                     + Math.cos((x + farScroll * 0.4) * 0.007) * 35;
-          ctx.lineTo(x, mountainY - 20 - peak);
-        }
-        ctx.lineTo(width + 100, height);
-        ctx.closePath();
-        ctx.fill();
       }
 
       // Phase 2: Rolling Mountain Mist Wave (when weather === 'mist')
@@ -1448,18 +1617,26 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       const midHillY = height * 0.67;
 
       // Solid meadow base fill down to road
-      const meadowBaseColor = theme === 'night'
-        ? '#172720'
-        : theme === 'sunset'
-        ? '#6B4031'
-        : theme === 'sakura'
-        ? '#648858' // Soft tea-green pasture
-        : '#5D7E54';
+      const meadowBaseColor = curStageId === 'tokyo'
+        ? (theme === 'night' ? '#181524' : '#2A2438')
+        : curStageId === 'kyoto'
+        ? (theme === 'night' ? '#1A1816' : '#5A4634')
+        : curStageId === 'hokkaido'
+        ? (theme === 'night' ? '#1B221E' : '#4E6847')
+        : (theme === 'night' ? '#172720' : theme === 'sunset' ? '#6B4031' : theme === 'sakura' ? '#648858' : '#5D7E54');
       ctx.fillStyle = meadowBaseColor;
       ctx.fillRect(-50, midHillY, width + 100, height - midHillY);
 
-      if (assets.bgHills) {
-        // Seamless Rolling Green Hills Layer (1536x384 strip, 100% solid opacity)
+      const curMidImg = curStageId === 'tokyo'
+        ? (assets.bgTokyoSkyline || assets.bgHills)
+        : curStageId === 'kyoto'
+        ? (assets.bgKyotoBamboo || assets.bgHills)
+        : curStageId === 'hokkaido'
+        ? (assets.bgHokkaidoLavender || assets.bgHills)
+        : assets.bgHills;
+
+      if (curMidImg) {
+        // Seamless Parallax Layer (1536x384 strip, 100% solid opacity)
         const hDrawW = 960;
         const hDrawH = 240;
         const startHX = -((midScroll * 1.0) % hDrawW);
@@ -1471,7 +1648,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         }
         // Overlap by 1px to guarantee zero seam gap (100% opaque!)
         for (let hx = startHX - hDrawW; hx < width + hDrawW; hx += hDrawW - 1) {
-          ctx.drawImage(assets.bgHills, hx, midHillY - 108, hDrawW, hDrawH);
+          ctx.drawImage(curMidImg, hx, midHillY - 108, hDrawW, hDrawH);
         }
         ctx.restore();
       } else {
@@ -1791,6 +1968,60 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         }
       }
 
+      // Stage 2 (Kyoto): Ancient Shrine Gate with Lanterns (at 2800m, 3500m, 4200m...)
+      if (assets.landmarkKyotoGate && curStageId === 'kyoto') {
+        const gateDist = Math.floor(currentDistanceMeters / 700) * 700 + 350;
+        const gateRel = gateDist - currentDistanceMeters;
+        const gateX = width * 0.45 + gateRel * 1.5;
+        if (gateX >= -110 && gateX <= width + 110) {
+          const t = (gateX - (-20)) / (width + 40);
+          const gateY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const gateSize = 92;
+          ctx.drawImage(assets.landmarkKyotoGate, gateX - gateSize / 2, gateY - gateSize + 4, gateSize, gateSize);
+        }
+      }
+
+      // Stage 3 (Hokkaido): Rustic Dairy Barn & Windmill (at 5400m, 6200m, 7000m...)
+      if (assets.landmarkHokkaidoBarn && curStageId === 'hokkaido') {
+        const barnDist = Math.floor(currentDistanceMeters / 800) * 800 + 400;
+        const barnRel = barnDist - currentDistanceMeters;
+        const barnX = width * 0.45 + barnRel * 1.5;
+        if (barnX >= -120 && barnX <= width + 120) {
+          const t = (barnX - (-20)) / (width + 40);
+          const barnY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const barnSize = 96;
+          ctx.drawImage(assets.landmarkHokkaidoBarn, barnX - barnSize / 2, barnY - barnSize + 6, barnSize, barnSize);
+        }
+      }
+
+      // Stage 4 (Tokyo): Yatai Ramen Food Cart & Vending Machine (at 7800m, 8600m, 9400m...)
+      if (assets.landmarkTokyoYatai && curStageId === 'tokyo') {
+        const yataiDist = Math.floor(currentDistanceMeters / 800) * 800 + 450;
+        const yataiRel = yataiDist - currentDistanceMeters;
+        const yataiX = width * 0.45 + yataiRel * 1.5;
+        if (yataiX >= -120 && yataiX <= width + 120) {
+          const t = (yataiX - (-20)) / (width + 40);
+          const yataiY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const yataiSize = 98;
+          ctx.drawImage(assets.landmarkTokyoYatai, yataiX - yataiSize / 2, yataiY - yataiSize + 6, yataiSize, yataiSize);
+
+          // Warm aroma steam rising from ramen pot
+          const steamPhase = windTime * 2.6;
+          for (let s = 0; s < 3; s++) {
+            const sProg = ((steamPhase + s * 0.7) % 2.0) / 2.0;
+            const sY = yataiY - yataiSize * 0.65 - sProg * 22;
+            const sX = yataiX - 16 + Math.sin(sProg * Math.PI * 2) * 4;
+            const sAlpha = Math.sin(sProg * Math.PI) * 0.5;
+            ctx.save();
+            ctx.fillStyle = `rgba(255, 235, 210, ${sAlpha})`;
+            ctx.beginPath();
+            ctx.arc(sX, sY, 3 + sProg * 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+      }
+
       // Fixed screen horizontal position (runner runs in place like a treadmill!)
       const runnerX = width * 0.40;
 
@@ -1945,6 +2176,167 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
             ctx.moveTo(sX, sY);
             ctx.quadraticCurveTo(sX + 2, sY - 4, sX, sY - 8);
             ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+
+      // D. Stage 2 Encounter: Cheerful Guardian Tanuki Spirit (Kyoto Arashiyama at 2650m, 3650m, 4650m...)
+      if (assets.encounterTanuki && curStageId === 'kyoto') {
+        const tanukiDist = Math.floor(currentDistanceMeters / 1000) * 1000 + 650;
+        const tanukiRel = tanukiDist - currentDistanceMeters;
+        const tanukiX = width * 0.45 + tanukiRel * 1.5;
+        if (tanukiX >= -100 && tanukiX <= width + 100) {
+          const t = (tanukiX - (-20)) / (width + 40);
+          const roadY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const tanukiW = 75;
+          const tanukiH = 75;
+          const distToRunner = Math.abs(tanukiX - runnerX);
+          const isNear = distToRunner < 120;
+          if (isNear) {
+            encounteredTanukiRef.current = true;
+          }
+
+          const tanukiHop = isNear ? Math.abs(Math.sin(windTime * 6)) * 6 : 0;
+          const tanukiWave = isNear ? Math.sin(windTime * 8) * 0.12 : 0;
+
+          ctx.save();
+          ctx.translate(tanukiX, roadY);
+          ctx.rotate(-inclineAngle);
+
+          // Drop shadow
+          ctx.fillStyle = 'rgba(30, 35, 25, 0.22)';
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 22, 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.translate(0, -tanukiHop);
+          ctx.rotate(tanukiWave);
+          ctx.drawImage(assets.encounterTanuki, -tanukiW / 2, -tanukiH, tanukiW, tanukiH);
+
+          if (isNear && tanukiX > 60 && tanukiX < width - 60) {
+            ctx.save();
+            const bubbleY = -tanukiH - 24;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = '#B85737';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-48, bubbleY, 96, 22, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#6E2C17';
+            ctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🍃 โชคดีมีชัย!', 0, bubbleY + 11);
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+      }
+
+      // E. Stage 3 Encounter: Hokkaido Dairy Calf with Daisy (Hokkaido Biei at 5500m, 6500m, 7500m...)
+      if (assets.encounterHokkaidoCow && curStageId === 'hokkaido') {
+        const cowDist = Math.floor(currentDistanceMeters / 1000) * 1000 + 500;
+        const cowRel = cowDist - currentDistanceMeters;
+        const cowX = width * 0.45 + cowRel * 1.5;
+        if (cowX >= -110 && cowX <= width + 110) {
+          const t = (cowX - (-20)) / (width + 40);
+          const roadY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const cowW = 82;
+          const cowH = 82;
+          const distToRunner = Math.abs(cowX - runnerX);
+          const isNear = distToRunner < 120;
+          if (isNear) {
+            encounteredCowRef.current = true;
+          }
+
+          const cowBob = Math.sin(windTime * 3) * 2;
+
+          ctx.save();
+          ctx.translate(cowX, roadY);
+          ctx.rotate(-inclineAngle);
+
+          // Drop shadow
+          ctx.fillStyle = 'rgba(30, 40, 30, 0.22)';
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 26, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.translate(0, cowBob);
+          ctx.drawImage(assets.encounterHokkaidoCow, -cowW / 2, -cowH, cowW, cowH);
+
+          if (isNear && cowX > 60 && cowX < width - 60) {
+            ctx.save();
+            const bubbleY = -cowH - 24;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = '#6E5296';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-46, bubbleY, 92, 22, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#3E2A5C';
+            ctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🐮 สู้ๆ มอ~!', 0, bubbleY + 11);
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+      }
+
+      // F. Stage 4 Encounter: Mailbox Cheering Black Cat (Neo-Tokyo Twilight at 7600m, 8600m, 9600m...)
+      if (assets.encounterTokyoCat && curStageId === 'tokyo') {
+        const catDist = Math.floor(currentDistanceMeters / 1000) * 1000 + 600;
+        const catRel = catDist - currentDistanceMeters;
+        const catX = width * 0.45 + catRel * 1.5;
+        if (catX >= -100 && catX <= width + 100) {
+          const t = (catX - (-20)) / (width + 40);
+          const roadY = roadLeftY + (roadRightY - roadLeftY) * t;
+          const catW = 76;
+          const catH = 80;
+          const distToRunner = Math.abs(catX - runnerX);
+          const isNear = distToRunner < 120;
+          if (isNear) {
+            encounteredMailboxCatRef.current = true;
+          }
+
+          const catPawWave = isNear ? Math.sin(windTime * 7) * 0.15 : 0;
+
+          ctx.save();
+          ctx.translate(catX, roadY);
+          ctx.rotate(-inclineAngle);
+
+          // Drop shadow
+          ctx.fillStyle = 'rgba(20, 15, 30, 0.25)';
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 24, 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.rotate(catPawWave);
+          ctx.drawImage(assets.encounterTokyoCat, -catW / 2, -catH, catW, catH);
+
+          if (isNear && catX > 60 && catX < width - 60) {
+            ctx.save();
+            const bubbleY = -catH - 24;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = '#D97706';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-48, bubbleY, 96, 22, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#78350F';
+            ctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🐈‍⬛ แชมเปี้ยน!', 0, bubbleY + 11);
+            ctx.restore();
           }
           ctx.restore();
         }
@@ -2619,8 +3011,32 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       <div className={`relative z-20 p-3 sm:p-4 flex items-center justify-between gap-2 transition-all duration-300 ${
         zenMode ? 'opacity-20 hover:opacity-100' : 'opacity-100'
       }`}>
-        {/* Left: Theme Switcher & Companion Picker */}
+        {/* Left: Stage Progress & Theme Switcher & Companion Picker */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Active Stage Indicator Badge */}
+          {(() => {
+            const activeStageId = getStageForDistance(metrics.distanceMeters);
+            const activeStage = SCENIC_STAGES[activeStageId];
+            return (
+              <button
+                type="button"
+                onClick={() => setShowGoshuinModal(true)}
+                className="flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#EDE6DC] hover:border-[#D4AF37] shadow-cozy-sm text-xs font-semibold cursor-pointer transition-all hover:scale-102 active:scale-98"
+                title={`เมืองปัจจุบัน: ${activeStage.name} (${activeStage.rangeKm}) • คลิกเพื่อดูสมุดตราประทับ`}
+              >
+                <div className="w-5 h-5 rounded-lg border border-[#C44536]/30 bg-[#FDF4F2] flex items-center justify-center overflow-hidden shrink-0">
+                  <img src={activeStage.stampSrc} alt={activeStage.name} className="w-4 h-4 object-contain" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-[#2C2621]">{activeStage.name}</span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-full bg-[#F3EFE6] text-[#7A6E65]">
+                    {activeStage.rangeKm}
+                  </span>
+                </div>
+              </button>
+            );
+          })()}
+
           {/* Theme Selector with Real-World Time Auto-Sync */}
           <div className="flex items-center gap-1 bg-white/90 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-[#EDE6DC] shadow-cozy-sm text-xs font-medium">
             {/* Auto Real-Time Mode Toggle */}
@@ -3364,6 +3780,49 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
         </div>
       </div>
+
+      {/* CELEBRATORY STAGE TRANSITION BANNER (Phase 5) */}
+      {activeStageTransition && (
+        <div 
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-auto cursor-pointer animate-in fade-in slide-in-from-top-6 duration-500 max-w-[92vw] sm:max-w-md select-none"
+          onClick={() => {
+            setShowGoshuinModal(true);
+            setActiveStageTransition(null);
+          }}
+          title="คลิกเพื่อดูสมุดสะสมตราประทับ"
+        >
+          <div className="relative flex items-center gap-3.5 px-4.5 py-3.5 rounded-3xl bg-[#FAF7F2]/95 backdrop-blur-xl border-2 border-[#D4AF37] shadow-2xl text-[#2C2621] overflow-hidden">
+            {/* Shimmer background accent */}
+            <div 
+              className="absolute inset-0 opacity-10 pointer-events-none"
+              style={{ backgroundColor: activeStageTransition.stage.accent }}
+            />
+            {/* Hanko Stamp Icon */}
+            <div className="relative shrink-0 w-14 h-14 rounded-2xl border-2 border-[#C44536] bg-[#FDF4F2] flex items-center justify-center shadow-md rotate-[-3deg] overflow-hidden p-1">
+              <img
+                src={activeStageTransition.stage.stampSrc}
+                alt={activeStageTransition.stage.name}
+                className="w-full h-full object-contain filter drop-shadow-sm"
+              />
+              <span className="absolute -bottom-1 -right-1 text-[8px] font-black px-1 rounded bg-[#C44536] text-white">
+                済
+              </span>
+            </div>
+            {/* Text info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-[#C44536]">
+                <span>🎉 ข้ามเขตสู่เมืองใหม่ • {activeStageTransition.stage.rangeKm}</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-black text-[#2C2621] truncate">
+                {activeStageTransition.stage.name}
+              </h3>
+              <p className="text-[11px] text-[#7A6E65] line-clamp-2 leading-tight">
+                {activeStageTransition.stage.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* STEAM-STYLE ACHIEVEMENT TOAST NOTIFICATION (Phase 1) */}
       <ScenicAchievementToast
