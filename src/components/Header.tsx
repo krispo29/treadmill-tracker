@@ -4,7 +4,7 @@ import type { BluetoothProtocol, ConnectionStatus, UserProfile } from '../types/
 
 interface HeaderProps {
   status: ConnectionStatus;
-  protocol: BluetoothProtocol;
+  protocol?: BluetoothProtocol;
   deviceName: string;
   isSimulating: boolean;
   activeProfile: UserProfile;
@@ -21,7 +21,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   status,
-  protocol,
   deviceName,
   isSimulating,
   activeProfile,
@@ -58,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
               {status === 'connected' && (
                 <span className="inline-flex items-center gap-1.5 text-[#3B664E] font-medium">
                   <span className="w-2 h-2 rounded-full bg-[#52796F] animate-pulse" />
-                  เชื่อมต่อแล้ว: {deviceName || 'FS-01BD59-A'} ({protocol})
+                  เชื่อมต่อแล้ว: {deviceName || 'ลู่วิ่ง'}
                 </span>
               )}
               {status === 'connecting' && (
@@ -116,7 +115,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenHistory}
             className="px-3 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 bg-white hover:bg-[#F5F0E8] text-[#5A5047] border border-[#E5DDD0] transition-all cursor-pointer shadow-cozy-sm active:scale-95"
-            title="ดูประวัติและสถิติการวิ่งย้อนหลัง (Neon DB)"
+            title="ดูประวัติและสถิติการวิ่งย้อนหลัง"
           >
             <History className="w-3.5 h-3.5 text-[#52796F]" />
             <span>ประวัติ & สถิติ</span>

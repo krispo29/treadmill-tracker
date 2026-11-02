@@ -17,7 +17,6 @@ import {
 import type { 
   BluetoothProtocol, 
   ConnectionStatus, 
-  PacketLog, 
   TelemetryPoint, 
   TreadmillMetrics, 
   WorkoutGoal,
@@ -42,9 +41,7 @@ import { GoalSettingsModal } from './components/GoalSettingsModal';
 import { WorkoutActiveBanner } from './components/WorkoutActiveBanner';
 import { WorkoutProgramsModal } from './components/WorkoutProgramsModal';
 import { HistoryAnalyticsModal } from './components/HistoryAnalyticsModal';
-import { NeonSettingsModal } from './components/NeonSettingsModal';
 import { ProfileManagerModal } from './components/ProfileManagerModal';
-import { DiagnosticDrawer } from './components/DiagnosticDrawer';
 import { GiantRunningHud } from './components/GiantRunningHud';
 import { ScenicJourneyModal } from './components/ScenicJourneyModal';
 import { WorkoutRecapModal } from './components/WorkoutRecapModal';
@@ -64,14 +61,12 @@ export const App: React.FC = () => {
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [protocol, setProtocol] = useState<BluetoothProtocol>('Unknown');
   const [deviceName, setDeviceName] = useState<string>('');
-  const [logs, setLogs] = useState<PacketLog[]>([]);
   const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isWorkoutsModalOpen, setIsWorkoutsModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [isNeonModalOpen, setIsNeonModalOpen] = useState(false);
   const [isGiantHudOpen, setIsGiantHudOpen] = useState(false);
   const [isScenicModalOpen, setIsScenicModalOpen] = useState(false);
   const [isRecapModalOpen, setIsRecapModalOpen] = useState(false);
@@ -93,8 +88,15 @@ export const App: React.FC = () => {
   const isSavingRef = useRef<boolean>(false);
   const hasSavedCurrentSessionRef = useRef<boolean>(false);
 
-  // Multi-Profile Management (100% Neon Database Driven - Zero Hardcode)
-  const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  // Multi-Profile Management (100% Neon Database Driven with LocalStorage Cache)
+  const [profiles, setProfiles] = useState<UserProfile[]>(() => {
+    try {
+      const cached = localStorage.getItem('treadmill_profiles_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [activeProfileId, setActiveProfileId] = useState<string>(() => {
     return localStorage.getItem('treadmill_active_profile_id') || 'p_runner1';
   });
@@ -113,6 +115,9 @@ export const App: React.FC = () => {
         const dbProfiles = await neonDatabase.getProfiles();
         if (dbProfiles && dbProfiles.length > 0) {
           setProfiles(dbProfiles);
+          try {
+            localStorage.setItem('treadmill_profiles_cache', JSON.stringify(dbProfiles));
+          } catch {}
           const savedActiveId = localStorage.getItem('treadmill_active_profile_id');
           if (savedActiveId && dbProfiles.some(p => p.id === savedActiveId)) {
             setActiveProfileId(savedActiveId);
@@ -130,15 +135,15 @@ export const App: React.FC = () => {
 
   const activeProfile: UserProfile = profiles.find(p => p.id === activeProfileId) || profiles[0] || {
     id: 'p_runner1',
-    name: 'Runner',
+    name: 'Mike',
     avatar: '🏃‍♂️',
-    weightKg: 70,
-    heightCm: 170,
-    age: 28,
+    weightKg: 85,
+    heightCm: 175,
+    age: 30,
     gender: 'male',
-    defaultStartSpeed: 3.0,
-    favoriteSpeeds: [3.0, 5.0, 7.0, 9.0],
-    favoriteInclines: [0, 2, 4, 6]
+    defaultStartSpeed: 3.5,
+    favoriteSpeeds: [3.5, 6.5, 8.5, 10.5],
+    favoriteInclines: [0, 2, 4, 8]
   };
 
   // Load active runner's personal goal from Neon Database
@@ -213,9 +218,7 @@ export const App: React.FC = () => {
         setProtocol(newProtocol);
         if (name) setDeviceName(name);
       },
-      (log) => {
-        setLogs((prev) => [...prev.slice(-199), log]); // Keep last 200 logs
-      },
+      () => {}, // packet logs not needed in UI
       (point) => {
         setTelemetry((prev) => [...prev.slice(-150), point]); // Keep last 150 points for chart
       }
@@ -357,7 +360,7 @@ export const App: React.FC = () => {
   const handleUpdateActiveFavorites = async (newFavorites: number[]) => {
     const updatedProfile = { ...activeProfile, favoriteSpeeds: newFavorites };
     await handleSaveProfile(updatedProfile);
-    setSaveSuccessMsg(`⭐ บันทึกลง Neon: สปีดโปรดของ ${activeProfile.name} (${newFavorites.map(s => s.toFixed(1)).join(', ')} km/h)`);
+    setSaveSuccessMsg(`⭐ บันทึกสปีดโปรดของ ${activeProfile.name} (${newFavorites.map(s => s.toFixed(1)).join(', ')} km/h) เรียบร้อย`);
     setTimeout(() => setSaveSuccessMsg(null), 3500);
   };
 
@@ -365,12 +368,18 @@ export const App: React.FC = () => {
     await neonDatabase.saveProfile(p);
     const updated = await neonDatabase.getProfiles();
     setProfiles(updated);
+    try {
+      localStorage.setItem('treadmill_profiles_cache', JSON.stringify(updated));
+    } catch {}
   };
 
   const handleDeleteProfile = async (id: string) => {
     await neonDatabase.deleteProfile(id);
     const updated = await neonDatabase.getProfiles();
     setProfiles(updated);
+    try {
+      localStorage.setItem('treadmill_profiles_cache', JSON.stringify(updated));
+    } catch {}
     if (activeProfileId === id && updated.length > 0) {
       handleSelectProfile(updated[0].id);
     }
@@ -616,7 +625,7 @@ export const App: React.FC = () => {
               onClick={handleManualSaveWorkout}
               disabled={isSaving || metrics.elapsedSeconds < 5}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#EAF2EC] hover:bg-[#DCEAE0] text-[#3B664E] border border-[#CDE0D3] transition-all font-semibold cursor-pointer active:scale-95 disabled:opacity-40 shadow-cozy-sm"
-              title={`บันทึกผลการวิ่งของ ${activeProfile.name} ขึ้น Neon Database`}
+              title={`บันทึกผลการวิ่งของ ${activeProfile.name}`}
             >
               <Save className="w-3.5 h-3.5 text-[#52796F]" />
               <span>{isSaving ? 'กำลังบันทึก...' : `บันทึกเซสชั่นของ ${activeProfile.name}`}</span>
@@ -787,12 +796,6 @@ export const App: React.FC = () => {
 
       </main>
 
-      {/* Live Raw Hex Packet Diagnostic Drawer */}
-      <DiagnosticDrawer
-        logs={logs}
-        onClearLogs={() => setLogs([])}
-      />
-
       {/* Multi-Profile Manager Modal */}
       <ProfileManagerModal
         isOpen={isProfileModalOpen}
@@ -826,13 +829,6 @@ export const App: React.FC = () => {
         isOpen={isHistoryModalOpen}
         profiles={profiles}
         onClose={() => setIsHistoryModalOpen(false)}
-        onOpenNeonSettings={() => setIsNeonModalOpen(true)}
-      />
-
-      {/* Neon Database Settings Modal */}
-      <NeonSettingsModal
-        isOpen={isNeonModalOpen}
-        onClose={() => setIsNeonModalOpen(false)}
       />
 
       {/* Floating 1-Tap Giant HUD & Scenic View Launcher Buttons */}

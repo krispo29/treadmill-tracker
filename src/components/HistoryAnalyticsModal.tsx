@@ -4,37 +4,36 @@ import {
   History, 
   Download, 
   Trash2, 
-  Database, 
   Flame, 
   Mountain, 
   MapPin, 
   Timer, 
   Calendar,
   RefreshCw,
-  Users
+  Users,
+  Camera
 } from 'lucide-react';
 import type { WorkoutRecord, DatabaseStats } from '../types/database';
 import type { UserProfile } from '../types/treadmill';
 import { neonDatabase } from '../services/neonDatabase';
 import { formatDuration } from '../services/calculations';
+import { WorkoutPostcardModal } from './WorkoutPostcardModal';
 
 interface HistoryAnalyticsModalProps {
   isOpen: boolean;
   profiles: UserProfile[];
   onClose: () => void;
-  onOpenNeonSettings: () => void;
 }
 
 export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
   isOpen,
   profiles,
-  onClose,
-  onOpenNeonSettings
+  onClose
 }) => {
   const [workouts, setWorkouts] = useState<WorkoutRecord[]>([]);
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
-  const isNeonConnected = neonDatabase.isConfigured();
+  const [selectedPostcardRecord, setSelectedPostcardRecord] = useState<WorkoutRecord | null>(null);
 
   const loadWorkouts = async () => {
     setLoading(true);
@@ -114,22 +113,15 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
                 <span>ประวัติและสถิติการวิ่ง (Workout History)</span>
               </h2>
               <div className="flex items-center gap-2 mt-0.5 text-xs">
-                {isNeonConnected ? (
-                  <span className="text-[#3B664E] flex items-center gap-1.5 font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-[#52796F] animate-pulse" />
-                    Neon Database เชื่อมต่อแล้ว (Cloud Sync)
-                  </span>
-                ) : (
-                  <span className="text-[#A66E22] flex items-center gap-1.5 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-[#DDA15E]" />
-                    บันทึกลงในเครื่อง (ยังไม่ได้เชื่อม Neon)
-                  </span>
-                )}
+                <span className="text-[#3B664E] flex items-center gap-1.5 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-[#52796F] animate-pulse" />
+                  ซิงก์ประวัติการวิ่งอัตโนมัติ (Cloud Sync)
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Database Setup & Refresh Buttons */}
+          {/* Refresh Button */}
           <div className="flex items-center gap-2">
             <button
               onClick={loadWorkouts}
@@ -138,14 +130,6 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
               title="รีเฟรชข้อมูล"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-
-            <button
-              onClick={onOpenNeonSettings}
-              className="px-3.5 py-1.5 rounded-2xl bg-[#FAF7F2] hover:bg-[#F3EFE6] text-xs font-semibold text-[#52796F] border border-[#EDE6DC] flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>{isNeonConnected ? 'จัดการ Neon DB' : 'เชื่อมต่อ Neon DB'}</span>
             </button>
           </div>
         </div>
@@ -296,8 +280,17 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
                 {/* Right Action buttons */}
                 <div className="flex items-center gap-2 shrink-0">
                   <button
+                    onClick={() => setSelectedPostcardRecord(w)}
+                    className="px-3 py-1.5 rounded-xl bg-[#FDF0EC] hover:bg-[#F9E2DA] text-[#C46849] border border-[#F6D5C9] flex items-center gap-1.5 transition-all cursor-pointer font-bold shadow-cozy-sm active:scale-95 text-xs"
+                    title="เปิดดูและบันทึกภาพสตอรี่ IG / โปสการ์ดของรอบวิ่งนี้"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-[#C46849]" />
+                    <span>สตอรี่ IG / การ์ด</span>
+                  </button>
+
+                  <button
                     onClick={() => handleDownloadGpx(w)}
-                    className="px-3 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                    className="px-3 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 transition-colors cursor-pointer text-xs"
                     title="ดาวน์โหลดไฟล์ .GPX สำหรับอัปโหลดเข้า Strava"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -321,7 +314,7 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
         {filteredWorkouts.length > 0 && (
           <div className="pt-3 border-t border-slate-800 flex justify-between items-center shrink-0">
             <span className="text-xs text-slate-500">
-              {selectedUserFilter === 'all' ? 'ข้อมูลทั้งหมดเก็บไว้บน Neon Cloud' : `แสดงเฉพาะสถิติของ ${selectedUserFilter}`}
+              {selectedUserFilter === 'all' ? 'สถิติการออกกำลังกายทั้งหมด' : `แสดงเฉพาะสถิติของ ${selectedUserFilter}`}
             </span>
             <button
               onClick={handleDownloadCsv}
@@ -332,6 +325,13 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
             </button>
           </div>
         )}
+
+        {/* Postcard & IG Story Generator Modal */}
+        <WorkoutPostcardModal
+          isOpen={!!selectedPostcardRecord}
+          onClose={() => setSelectedPostcardRecord(null)}
+          record={selectedPostcardRecord}
+        />
       </div>
     </div>
   );

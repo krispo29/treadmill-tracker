@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   X, 
   Maximize2, 
@@ -22,16 +22,19 @@ import {
   Ghost,
   Trophy,
   Share2,
-  Download
+  Download,
+  Smartphone,
+  Image as ImageIcon
 } from 'lucide-react';
 import type { TreadmillMetrics, UserProfile, WorkoutGoal } from '../types/treadmill';
-import { formatDuration, formatPace } from '../services/calculations';
+import { formatDuration, formatPace, getCalorieReward } from '../services/calculations';
 import { audioCoach } from '../services/audioCoach';
 import { scenicAudioEngine } from '../services/scenicAudioEngine';
 import {
   ACHIEVEMENT_CATALOG,
   getUnlockedAchievementIds,
   saveUnlockedAchievementId,
+  syncProfileAchievements,
   playSteamAchievementChime,
   playTrainWhistleTone,
   getFoodsBurned,
@@ -294,18 +297,28 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const [isCapturingPostcard, setIsCapturingPostcard] = useState<boolean>(false);
   const [showShutterFlash, setShowShutterFlash] = useState<boolean>(false);
 
-  // Phase 1: Steam-Style Achievement Engine State & Queue
+  // Phase 1: Steam-Style Achievement Engine State & Queue (Profile Isolated)
   const [achievementQueue, setAchievementQueue] = useState<AchievementItem[]>([]);
   const unlockedInSessionRef = useRef<Set<string>>(new Set());
-  const [unlockedCount, setUnlockedCount] = useState<number>(() => getUnlockedAchievementIds().length);
+  const [unlockedCount, setUnlockedCount] = useState<number>(() => getUnlockedAchievementIds(activeProfile.id).length);
+
+  // Sync profile achievements whenever activeProfile changes
+  useEffect(() => {
+    setUnlockedCount(getUnlockedAchievementIds(activeProfile.id).length);
+    syncProfileAchievements(activeProfile.id).then((ids) => {
+      setUnlockedCount(ids.length);
+    }).catch(() => {});
+  }, [activeProfile.id]);
   const maxSpeedReachedRef = useRef<number>(0);
   const hasCapturedPostcardRef = useRef<boolean>(false);
   const [showGoshuinModal, setShowGoshuinModal] = useState<boolean>(false);
 
-  // Postcard Preview & Save Modal State (Fixes iPad Safari download & bounce)
+  // Postcard Preview & Save Modal State (Instagram 9:16 Story & 3:2 Landscape)
   const [postcardPreviewUrl, setPostcardPreviewUrl] = useState<string | null>(null);
   const [postcardBlob, setPostcardBlob] = useState<Blob | null>(null);
   const [postcardFileName, setPostcardFileName] = useState<string>('');
+  const [postcardFormat, setPostcardFormat] = useState<'story' | 'landscape'>('story');
+  const lastSnapshotCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Phase 2 & 5: Roadside Encounters Tracking Refs
   const encounteredDeerRef = useRef<boolean>(false);
@@ -375,9 +388,9 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     lastAcknowledgedStageRef.current = getStageForDistance(metrics.distanceMeters);
   };
 
-  const handleDismissAchievement = (id: string) => {
+  const handleDismissAchievement = useCallback((id: string) => {
     setAchievementQueue((prev) => prev.filter((item) => item.id !== id));
-  };
+  }, []);
 
   const pacerEnabledRef = useRef(pacerEnabled);
   const pacerSpeedRef = useRef(pacerSpeed);
@@ -416,236 +429,549 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     } catch {}
   };
 
-  const handleCapturePostcard = () => {
+  // Render 9:16 Vertical Instagram Story Card (1080 x 1920)
+  const drawStoryPostcard = (
+    postCanvas: HTMLCanvasElement,
+    pctx: CanvasRenderingContext2D,
+    sourceCanvas: HTMLCanvasElement
+  ) => {
+    postCanvas.width = 1080;
+    postCanvas.height = 1920;
+
+    // 1. Cozy Warm Cream Cardstock Gradient Background (#FAF7F2 to #F3ECE1)
+    const bgGrad = pctx.createLinearGradient(0, 0, 0, 1920);
+    bgGrad.addColorStop(0, '#FAF7F2');
+    bgGrad.addColorStop(1, '#F3ECE1');
+    pctx.fillStyle = bgGrad;
+    pctx.fillRect(0, 0, 1080, 1920);
+
+    // Outer double border
+    pctx.strokeStyle = '#E8DFD3';
+    pctx.lineWidth = 3;
+    pctx.strokeRect(32, 32, 1080 - 64, 1920 - 64);
+
+    pctx.strokeStyle = '#F2ECE4';
+    pctx.lineWidth = 1.5;
+    pctx.strokeRect(40, 40, 1080 - 80, 1920 - 80);
+
+    // 2. Top Header (Safe from Instagram top story UI)
+    pctx.textAlign = 'left';
+    pctx.textBaseline = 'middle';
+    pctx.fillStyle = '#52796F';
+    pctx.font = 'bold 22px "Cinzel", Georgia, serif';
+    pctx.fillText('🌿 TREADMILL STUDIO', 60, 115);
+
+    pctx.fillStyle = '#8C827A';
+    pctx.font = '600 15px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText('SCENIC RUN • JAPAN JOURNEY', 60, 145);
+
+    // Runner Profile badge on the right
+    pctx.textAlign = 'right';
+    pctx.fillStyle = '#2C2621';
+    pctx.font = 'bold 22px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(`${activeProfile.avatar || '🏃‍♂️'} ${activeProfile.name || 'Mike'}`, 1080 - 60, 115);
+
+    const dateStr = new Date().toLocaleDateString('th-TH', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    pctx.fillStyle = '#A0958B';
+    pctx.font = '14px ui-monospace, monospace';
+    pctx.fillText(dateStr, 1080 - 60, 145);
+
+    // 3. Scenic Photo Viewport (4:3 aspect ratio, 960 x 720)
+    const photoX = 60;
+    const photoY = 180;
+    const photoW = 960;
+    const photoH = 720;
+
+    // Drop shadow
+    pctx.save();
+    pctx.fillStyle = 'rgba(44, 38, 33, 0.08)';
+    pctx.beginPath();
+    pctx.roundRect(photoX + 5, photoY + 5, photoW, photoH, 24);
+    pctx.fill();
+    pctx.restore();
+
+    // Clip and draw scenic snapshot
+    pctx.save();
+    pctx.beginPath();
+    pctx.roundRect(photoX, photoY, photoW, photoH, 24);
+    pctx.clip();
+    pctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, photoX, photoY, photoW, photoH);
+    pctx.restore();
+
+    pctx.strokeStyle = '#D9CFBF';
+    pctx.lineWidth = 2;
+    pctx.beginPath();
+    pctx.roundRect(photoX, photoY, photoW, photoH, 24);
+    pctx.stroke();
+
+    // 3.1 Postal Seal Stamp (Hanko 🗻 富士山)
+    const sealX = photoX + photoW - 90;
+    const sealY = photoY + 80;
+    pctx.save();
+    pctx.translate(sealX, sealY);
+    pctx.rotate(-0.06);
+
+    pctx.strokeStyle = '#C44536';
+    pctx.lineWidth = 2.5;
+    pctx.beginPath();
+    pctx.roundRect(-60, -45, 120, 90, 8);
+    pctx.stroke();
+
+    pctx.lineWidth = 1.2;
+    pctx.beginPath();
+    pctx.roundRect(-54, -40, 108, 80, 6);
+    pctx.stroke();
+
+    pctx.fillStyle = '#C44536';
+    pctx.font = '900 14px "Noto Serif JP", serif';
+    pctx.textAlign = 'center';
+    pctx.textBaseline = 'middle';
+    pctx.fillText('🗻 富士山', 0, -18);
+    pctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText('SCENIC RUN', 0, 4);
+    pctx.font = 'bold 9px ui-monospace, monospace';
+    pctx.fillText(new Date().toLocaleDateString('ja-JP').replace(/\//g, '.'), 0, 22);
+    pctx.restore();
+
+    // 3.2 Goshuin Seal Stamp (if unlocked)
+    const latestAchId = Array.from(unlockedInSessionRef.current).pop() || getUnlockedAchievementIds(activeProfile.id)[0];
+    const latestAch = latestAchId ? ACHIEVEMENT_CATALOG.find((a) => a.id === latestAchId) : null;
+    if (latestAch) {
+      const achSealX = photoX + 90;
+      const achSealY = photoY + 80;
+      pctx.save();
+      pctx.translate(achSealX, achSealY);
+      pctx.rotate(0.06);
+
+      pctx.strokeStyle = '#B3392B';
+      pctx.lineWidth = 2.5;
+      pctx.beginPath();
+      pctx.roundRect(-60, -45, 120, 90, 8);
+      pctx.stroke();
+
+      pctx.lineWidth = 1.2;
+      pctx.beginPath();
+      pctx.roundRect(-54, -40, 108, 80, 6);
+      pctx.stroke();
+
+      pctx.fillStyle = '#B3392B';
+      pctx.font = 'bold 16px ui-sans-serif, system-ui, sans-serif';
+      pctx.textAlign = 'center';
+      pctx.textBaseline = 'middle';
+      pctx.fillText(`${latestAch.icon} 達成`, 0, -18);
+      pctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+      pctx.fillText(latestAch.title.slice(0, 10), 0, 4);
+      pctx.font = 'bold 9px ui-monospace, monospace';
+      pctx.fillText('GOSHUIN SEAL', 0, 22);
+      pctx.restore();
+    }
+
+    // 4. Hero Primary Distance Card (Bold, huge numbers for Instagram Stories!)
+    const heroY = 930;
+    pctx.fillStyle = '#FFFFFF';
+    pctx.beginPath();
+    pctx.roundRect(photoX, heroY, photoW, 230, 24);
+    pctx.fill();
+
+    pctx.strokeStyle = '#EBE4DA';
+    pctx.lineWidth = 1.5;
+    pctx.stroke();
+
+    // Top accent bar
+    pctx.fillStyle = '#52796F';
+    pctx.beginPath();
+    pctx.roundRect(photoX, heroY, photoW, 6, [24, 24, 0, 0]);
+    pctx.fill();
+
+    pctx.textAlign = 'left';
+    pctx.textBaseline = 'top';
+    pctx.fillStyle = '#8C827A';
+    pctx.font = 'bold 15px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText('TOTAL DISTANCE • ระยะทางสะสม', photoX + 35, heroY + 28);
+
+    const distStr = (metrics.distanceMeters / 1000).toFixed(2);
+    pctx.fillStyle = '#2C2621';
+    pctx.font = '900 100px ui-monospace, monospace';
+    pctx.fillText(distStr, photoX + 30, heroY + 68);
+
+    const numWidth = pctx.measureText(distStr).width;
+    pctx.fillStyle = '#52796F';
+    pctx.font = '900 38px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText('KM', photoX + 35 + numWidth + 16, heroY + 125);
+
+    // Food reward badge inside hero card (right side)
+    const calReward = getCalorieReward(metrics.caloriesBurned);
+    const badgeW = 260;
+    const badgeH = 175;
+    const badgeX = photoX + photoW - badgeW - 25;
+    const badgeY = heroY + 28;
+
+    pctx.fillStyle = '#FDF6EA';
+    pctx.beginPath();
+    pctx.roundRect(badgeX, badgeY, badgeW, badgeH, 20);
+    pctx.fill();
+    pctx.strokeStyle = '#F0DFBE';
+    pctx.lineWidth = 1;
+    pctx.stroke();
+
+    pctx.textAlign = 'center';
+    pctx.font = '50px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(calReward.emoji, badgeX + badgeW / 2, badgeY + 15);
+
+    pctx.fillStyle = '#9A641F';
+    pctx.font = 'bold 15px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(calReward.foodName.slice(0, 15), badgeX + badgeW / 2, badgeY + 85);
+
+    pctx.fillStyle = '#B67A28';
+    pctx.font = '600 13px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(`เบิร์น ${Math.round(metrics.caloriesBurned)} kcal`, badgeX + badgeW / 2, badgeY + 115);
+
+    // 5. Three Key Stats Badges (Time, Pace, Calories)
+    const statCardsY = 1185;
+    const statCardW = 300;
+    const statCardH = 185;
+    const statGap = 30;
+
+    const cards = [
+      {
+        icon: '⏱️',
+        label: 'เวลาวิ่ง (TIME)',
+        value: formatDuration(metrics.elapsedSeconds),
+        unit: '',
+        color: '#2C2621'
+      },
+      {
+        icon: '⚡',
+        label: 'เพซเฉลี่ย (PACE)',
+        value: formatPace(metrics.speedKmh > 0.5 ? 60 / metrics.speedKmh : 0),
+        unit: '/km',
+        color: '#B67A28'
+      },
+      {
+        icon: '🔥',
+        label: 'แคลอรี (KCAL)',
+        value: `${Math.round(metrics.caloriesBurned)}`,
+        unit: 'kcal',
+        color: '#B85737'
+      }
+    ];
+
+    cards.forEach((c, i) => {
+      const cx = photoX + i * (statCardW + statGap);
+      const cy = statCardsY;
+
+      pctx.fillStyle = '#FFFFFF';
+      pctx.beginPath();
+      pctx.roundRect(cx, cy, statCardW, statCardH, 20);
+      pctx.fill();
+
+      pctx.strokeStyle = '#EBE4DA';
+      pctx.lineWidth = 1.2;
+      pctx.stroke();
+
+      pctx.textAlign = 'center';
+      pctx.textBaseline = 'top';
+      pctx.fillStyle = '#8C827A';
+      pctx.font = 'bold 14px ui-sans-serif, system-ui, sans-serif';
+      pctx.fillText(`${c.icon} ${c.label}`, cx + statCardW / 2, cy + 24);
+
+      pctx.fillStyle = c.color;
+      pctx.font = 'bold 36px ui-monospace, monospace';
+      pctx.fillText(c.value, cx + statCardW / 2, cy + 68);
+
+      if (c.unit) {
+        pctx.fillStyle = '#A0958B';
+        pctx.font = 'bold 14px ui-sans-serif, system-ui, sans-serif';
+        pctx.fillText(c.unit, cx + statCardW / 2, cy + 124);
+      }
+    });
+
+    // 6. Journey Route & Story Details Card
+    const storyCardY = 1395;
+    const storyCardH = 265;
+    pctx.fillStyle = '#FFFFFF';
+    pctx.beginPath();
+    pctx.roundRect(photoX, storyCardY, photoW, storyCardH, 24);
+    pctx.fill();
+
+    pctx.strokeStyle = '#EBE4DA';
+    pctx.lineWidth = 1.5;
+    pctx.stroke();
+
+    pctx.textAlign = 'left';
+    pctx.textBaseline = 'top';
+    pctx.fillStyle = '#2C2621';
+    pctx.font = 'bold 20px "Cinzel", "Playfair Display", Georgia, serif';
+    pctx.fillText('JOURNEY MEMORIES • บันทึกการเดินทาง', photoX + 35, storyCardY + 28);
+
+    const curStageCfg = SCENIC_STAGES[getStageForDistance(metrics.distanceMeters)];
+    const themeThLabel = 
+      theme === 'sakura' ? 'ซากุระสปริง 🌸' : 
+      theme === 'countryside' ? 'ชนบทอบอุ่น 🌾' : 
+      theme === 'sunset' ? 'ตะวันตกดิน 🌅' : 'ราตรีใต้แสงดาว 🌌';
+    const companionThLabel = 
+      companion === 'shiba' ? '🐕 ชิบะนำทาง' : 
+      companion === 'cat' ? '🐈 แมวส้มแสนซน' : 
+      companion === 'bunny' ? '🐇 กระต่ายป่า' : '🏃‍♀️ วิ่งเดี่ยวพิชิตเป้าหมาย';
+    const weatherThLabel = 
+      weather === 'clear' ? 'แจ่มใส ☀️' : 
+      weather === 'rain' ? 'ฝนโปรยปราย 🌧️' : 
+      weather === 'mist' ? 'หมอกยามเช้า 🌫️' : 'ใบไม้ร่วง 🍂';
+
+    pctx.fillStyle = '#3B664E';
+    pctx.font = 'bold 18px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(`📍 เส้นทาง: ${curStageCfg.name} (${curStageCfg.rangeKm})`, photoX + 35, storyCardY + 75);
+
+    pctx.fillStyle = '#5A5047';
+    pctx.font = '500 16px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(`⛅ บรรยากาศ: ${themeThLabel}  •  สภาพอากาศ: ${weatherThLabel}`, photoX + 35, storyCardY + 118);
+
+    pctx.fillText(`🐾 เพื่อนร่วมทาง: ${companionThLabel}  •  โดย: ${activeProfile.name || 'Mike'}`, photoX + 35, storyCardY + 160);
+
+    pctx.fillStyle = '#8C827A';
+    pctx.font = '15px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(`⛰️ ไต่ระดับความชัน: ${Math.round(metrics.elevationGainMeters)} m  •  เผาผลาญไขมันบริสุทธิ์: ${metrics.fatGramsBurned.toFixed(0)} g`, photoX + 35, storyCardY + 204);
+
+    // 7. Footer Watermark (Safe from bottom IG text field)
+    pctx.textAlign = 'center';
+    pctx.fillStyle = '#A0958B';
+    pctx.font = 'italic 15px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText('Treadmill Studio — Scenic Journey Edition • ออกกำลังกายไม่มีเบื่อ', 540, 1720);
+  };
+
+  // Render 3:2 Classic Landscape Postcard (1200 x 800)
+  const drawLandscapePostcard = (
+    postCanvas: HTMLCanvasElement,
+    pctx: CanvasRenderingContext2D,
+    sourceCanvas: HTMLCanvasElement
+  ) => {
+    postCanvas.width = 1200;
+    postCanvas.height = 800;
+
+    // 1. Postcard Base Canvas (Cozy Warm Wabi-Sabi Cream Cardstock #FAF7F2)
+    pctx.fillStyle = '#FAF7F2';
+    pctx.fillRect(0, 0, 1200, 800);
+
+    // Subtle textured border margin
+    pctx.strokeStyle = '#E7DFD5';
+    pctx.lineWidth = 2;
+    pctx.strokeRect(20, 20, 1160, 760);
+
+    // 2. Main Scenic Photo Inset (Polaroid Snapshot)
+    const photoX = 45;
+    const photoY = 45;
+    const photoW = 1110;
+    const photoH = 550;
+
+    // Photo drop shadow
+    pctx.save();
+    pctx.fillStyle = 'rgba(44, 38, 33, 0.08)';
+    pctx.fillRect(photoX + 4, photoY + 4, photoW, photoH);
+    pctx.restore();
+
+    // Draw scenic canvas snapshot into photo area
+    pctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, photoX, photoY, photoW, photoH);
+
+    // Subtle thin photo inner border
+    pctx.strokeStyle = '#D9CFBF';
+    pctx.lineWidth = 1;
+    pctx.strokeRect(photoX, photoY, photoW, photoH);
+
+    // 3. Traditional Vermilion Red Postal Seal Stamp (Inkan / Hanko)
+    const sealX = photoX + photoW - 75;
+    const sealY = photoY + 70;
+    pctx.save();
+    pctx.translate(sealX, sealY);
+    pctx.rotate(-0.08);
+
+    pctx.strokeStyle = '#C44536';
+    pctx.lineWidth = 2.5;
+    pctx.beginPath();
+    pctx.roundRect(-55, -45, 110, 90, 8);
+    pctx.stroke();
+
+    pctx.lineWidth = 1.2;
+    pctx.beginPath();
+    pctx.roundRect(-50, -40, 100, 80, 6);
+    pctx.stroke();
+
+    pctx.fillStyle = '#C44536';
+    pctx.font = '900 13px "Noto Serif JP", serif';
+    pctx.textAlign = 'center';
+    pctx.textBaseline = 'middle';
+    pctx.fillText('🗻 富士山', 0, -18);
+    pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText('SCENIC RUN', 0, 4);
+    pctx.font = 'bold 8px ui-monospace, monospace';
+    pctx.fillText(new Date().toLocaleDateString('ja-JP').replace(/\//g, '.'), 0, 22);
+    pctx.restore();
+
+    // 3.5 Phase 3: Goshuin Achievement Seal Stamp (if any unlocked)
+    const latestAchId = Array.from(unlockedInSessionRef.current).pop() || getUnlockedAchievementIds(activeProfile.id)[0];
+    const latestAch = latestAchId ? ACHIEVEMENT_CATALOG.find((a) => a.id === latestAchId) : null;
+    if (latestAch) {
+      const achSealX = photoX + 75;
+      const achSealY = photoY + 70;
+      pctx.save();
+      pctx.translate(achSealX, achSealY);
+      pctx.rotate(0.06);
+
+      pctx.strokeStyle = '#B3392B';
+      pctx.lineWidth = 2.2;
+      pctx.beginPath();
+      pctx.roundRect(-55, -45, 110, 90, 8);
+      pctx.stroke();
+
+      pctx.lineWidth = 1.0;
+      pctx.beginPath();
+      pctx.roundRect(-50, -40, 100, 80, 6);
+      pctx.stroke();
+
+      pctx.fillStyle = '#B3392B';
+      pctx.font = 'bold 15px ui-sans-serif, system-ui, sans-serif';
+      pctx.textAlign = 'center';
+      pctx.textBaseline = 'middle';
+      pctx.fillText(`${latestAch.icon} 達成`, 0, -18);
+      pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+      pctx.fillText(latestAch.title.slice(0, 10), 0, 4);
+      pctx.font = 'bold 8px ui-monospace, monospace';
+      pctx.fillText('GOSHUIN SEAL', 0, 22);
+      pctx.restore();
+    }
+
+    // 4. Bottom Metadata Area
+    const metaBaseY = 635;
+    pctx.fillStyle = '#2C2621';
+    pctx.font = 'bold 26px "Cinzel", "Playfair Display", Georgia, serif';
+    pctx.textAlign = 'left';
+    pctx.textBaseline = 'top';
+    pctx.fillText('JOURNEY MEMORIES', 55, metaBaseY);
+
+    pctx.fillStyle = '#7A6E65';
+    pctx.font = '500 13px ui-sans-serif, system-ui, sans-serif';
+    const curStageCfg = SCENIC_STAGES[getStageForDistance(metrics.distanceMeters)];
+    const themeThLabel = theme === 'sakura' ? 'ซากุระสปริง' : theme === 'countryside' ? 'ชนบทอบอุ่น' : theme === 'sunset' ? 'ตะวันตกดิน' : 'ราตรีใต้แสงดาว';
+    const companionThLabel = companion === 'shiba' ? '🐕 ชิบะ' : companion === 'cat' ? '🐈 แมวส้ม' : companion === 'bunny' ? '🐇 กระต่าย' : '🏃‍♀️ วิ่งเดี่ยว';
+    pctx.fillText(`เส้นทาง: ${curStageCfg.name} (${curStageCfg.rangeKm})  •  บรรยากาศ: ${themeThLabel}  •  เพื่อนร่วมทาง: ${companionThLabel}  •  โดย ${activeProfile.name || 'Athlete'}`, 55, metaBaseY + 36);
+
+    const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    pctx.fillStyle = '#A0958B';
+    pctx.font = '11px ui-monospace, monospace';
+    pctx.fillText(`บันทึกเมื่อ: ${dateStr}`, 55, metaBaseY + 62);
+
+    // Right Side: 4 Elegant Metric Stat Badges
+    const statCardW = 105;
+    const statCardH = 68;
+    const statCards = [
+      { label: 'ระยะทาง', value: `${(metrics.distanceMeters / 1000).toFixed(2)}`, unit: 'km', color: '#3B664E' },
+      { label: 'เวลาวิ่ง', value: formatDuration(metrics.elapsedSeconds), unit: '', color: '#2C2621' },
+      { label: 'เพซเฉลี่ย', value: formatPace(metrics.speedKmh > 0.5 ? 60 / metrics.speedKmh : 0), unit: '/km', color: '#B67A28' },
+      { label: 'แคลอรี', value: `${Math.round(metrics.caloriesBurned)}`, unit: 'kcal', color: '#B85737' }
+    ];
+
+    const startStatX = 1200 - 55 - (statCards.length * (statCardW + 12));
+    statCards.forEach((c, idx) => {
+      const cx = startStatX + idx * (statCardW + 12);
+      const cy = metaBaseY;
+
+      pctx.fillStyle = '#FFFFFF';
+      pctx.beginPath();
+      pctx.roundRect(cx, cy, statCardW, statCardH, 12);
+      pctx.fill();
+
+      pctx.strokeStyle = '#EBE4DA';
+      pctx.lineWidth = 1.2;
+      pctx.stroke();
+
+      pctx.fillStyle = '#8C827A';
+      pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+      pctx.textAlign = 'center';
+      pctx.fillText(c.label, cx + statCardW / 2, cy + 18);
+
+      pctx.fillStyle = c.color;
+      pctx.font = 'bold 17px ui-monospace, monospace';
+      pctx.fillText(c.value, cx + statCardW / 2, cy + 40);
+
+      if (c.unit) {
+        pctx.fillStyle = '#A0958B';
+        pctx.font = '8px ui-sans-serif, system-ui, sans-serif';
+        pctx.fillText(c.unit, cx + statCardW / 2, cy + 54);
+      }
+    });
+
+    // Bottom Watermark
+    pctx.fillStyle = '#C2B7AA';
+    pctx.font = 'italic 10px ui-sans-serif, system-ui, sans-serif';
+    pctx.textAlign = 'right';
+    pctx.fillText('Treadmill Tracker — Scenic Journey Edition', 1140, 765);
+  };
+
+  // Render postcard from current snapshot in selected format
+  const renderPostcardFromSnapshot = (format: 'story' | 'landscape') => {
+    const sourceCanvas = lastSnapshotCanvasRef.current || canvasRef.current;
+    if (!sourceCanvas) return;
+
+    setPostcardFormat(format);
+
+    try {
+      const postCanvas = document.createElement('canvas');
+      const pctx = postCanvas.getContext('2d');
+      if (!pctx) return;
+
+      if (format === 'story') {
+        drawStoryPostcard(postCanvas, pctx, sourceCanvas);
+      } else {
+        drawLandscapePostcard(postCanvas, pctx, sourceCanvas);
+      }
+
+      const dataUrl = postCanvas.toDataURL('image/png');
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const prefix = format === 'story' ? 'ig-story-running' : 'scenic-postcard';
+      const fileName = `${prefix}-${fileDate}.png`;
+
+      setPostcardPreviewUrl(dataUrl);
+      setPostcardFileName(fileName);
+
+      postCanvas.toBlob((blob) => {
+        if (!blob) return;
+        setPostcardBlob(blob);
+      }, 'image/png');
+    } catch (err) {
+      console.error('Failed to render postcard:', err);
+    }
+  };
+
+  const handleCapturePostcard = (targetFormat?: 'story' | 'landscape') => {
     const canvas = canvasRef.current;
     if (!canvas || isCapturingPostcard) return;
+
+    const format = targetFormat || postcardFormat;
 
     setIsCapturingPostcard(true);
     hasCapturedPostcardRef.current = true;
     setShowShutterFlash(true);
     setTimeout(() => setShowShutterFlash(false), 320);
 
+    // Save snapshot of current running canvas so user can toggle formats seamlessly
     try {
-      const postCanvas = document.createElement('canvas');
-      postCanvas.width = 1200;
-      postCanvas.height = 800;
-      const pctx = postCanvas.getContext('2d');
-      if (!pctx) return;
+      const snap = document.createElement('canvas');
+      snap.width = canvas.width;
+      snap.height = canvas.height;
+      const snapCtx = snap.getContext('2d');
+      if (snapCtx) snapCtx.drawImage(canvas, 0, 0);
+      lastSnapshotCanvasRef.current = snap;
+    } catch {}
 
-      // 1. Postcard Base Canvas (Cozy Warm Wabi-Sabi Cream Cardstock #FAF7F2)
-      pctx.fillStyle = '#FAF7F2';
-      pctx.fillRect(0, 0, 1200, 800);
-
-      // Subtle textured border margin
-      pctx.strokeStyle = '#E7DFD5';
-      pctx.lineWidth = 2;
-      pctx.strokeRect(20, 20, 1160, 760);
-
-      // 2. Main Scenic Photo Inset (Polaroid Snapshot)
-      const photoX = 45;
-      const photoY = 45;
-      const photoW = 1110;
-      const photoH = 550;
-
-      // Photo drop shadow
-      pctx.save();
-      pctx.fillStyle = 'rgba(44, 38, 33, 0.08)';
-      pctx.fillRect(photoX + 4, photoY + 4, photoW, photoH);
-      pctx.restore();
-
-      // Draw scenic canvas snapshot into photo area
-      pctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, photoX, photoY, photoW, photoH);
-
-      // Subtle thin photo inner border
-      pctx.strokeStyle = '#D9CFBF';
-      pctx.lineWidth = 1;
-      pctx.strokeRect(photoX, photoY, photoW, photoH);
-
-      // 3. Traditional Vermilion Red Postal Seal Stamp (Inkan / Hanko)
-      const sealX = photoX + photoW - 75;
-      const sealY = photoY + 70;
-      pctx.save();
-      pctx.translate(sealX, sealY);
-      pctx.rotate(-0.08); // Slight organic rotation for stamp authenticity
-
-      // Double seal border
-      pctx.strokeStyle = '#C44536';
-      pctx.lineWidth = 2.5;
-      pctx.beginPath();
-      pctx.roundRect(-55, -45, 110, 90, 8);
-      pctx.stroke();
-
-      pctx.lineWidth = 1.2;
-      pctx.beginPath();
-      pctx.roundRect(-50, -40, 100, 80, 6);
-      pctx.stroke();
-
-      pctx.fillStyle = '#C44536';
-      pctx.font = '900 13px "Noto Serif JP", "Hiragino Mincho ProN", serif';
-      pctx.textAlign = 'center';
-      pctx.textBaseline = 'middle';
-      pctx.fillText('🗻 富士山', 0, -18);
-      pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
-      pctx.fillText('SCENIC RUN', 0, 4);
-      pctx.font = 'bold 8px ui-monospace, monospace';
-      pctx.fillText(new Date().toLocaleDateString('ja-JP').replace(/\//g, '.'), 0, 22);
-      pctx.restore();
-
-      // 3.5 Phase 3: Goshuin Achievement Seal Stamp (if any unlocked)
-      const latestAchId = Array.from(unlockedInSessionRef.current).pop() || getUnlockedAchievementIds()[0];
-      const latestAch = latestAchId ? ACHIEVEMENT_CATALOG.find((a) => a.id === latestAchId) : null;
-      if (latestAch) {
-        const achSealX = photoX + 75;
-        const achSealY = photoY + 70;
-        pctx.save();
-        pctx.translate(achSealX, achSealY);
-        pctx.rotate(0.06);
-
-        pctx.strokeStyle = '#B3392B';
-        pctx.lineWidth = 2.2;
-        pctx.beginPath();
-        pctx.roundRect(-55, -45, 110, 90, 8);
-        pctx.stroke();
-
-        pctx.lineWidth = 1.0;
-        pctx.beginPath();
-        pctx.roundRect(-50, -40, 100, 80, 6);
-        pctx.stroke();
-
-        pctx.fillStyle = '#B3392B';
-        pctx.font = 'bold 15px ui-sans-serif, system-ui, sans-serif';
-        pctx.textAlign = 'center';
-        pctx.textBaseline = 'middle';
-        pctx.fillText(`${latestAch.icon} 達成`, 0, -18);
-        pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
-        pctx.fillText(latestAch.title.slice(0, 10), 0, 4);
-        pctx.font = 'bold 8px ui-monospace, monospace';
-        pctx.fillText('GOSHUIN SEAL', 0, 22);
-        pctx.restore();
-      }
-
-      // 4. Bottom Metadata Area
-      const metaBaseY = 635;
-      pctx.fillStyle = '#2C2621';
-      pctx.font = 'bold 26px "Cinzel", "Playfair Display", Georgia, serif';
-      pctx.textAlign = 'left';
-      pctx.textBaseline = 'top';
-      pctx.fillText('JOURNEY MEMORIES', 55, metaBaseY);
-
-      pctx.fillStyle = '#7A6E65';
-      pctx.font = '500 13px ui-sans-serif, system-ui, sans-serif';
-      const curStageCfg = SCENIC_STAGES[getStageForDistance(metrics.distanceMeters)];
-      const themeThLabel = theme === 'sakura' ? 'ซากุระสปริง' : theme === 'countryside' ? 'ชนบทอบอุ่น' : theme === 'sunset' ? 'ตะวันตกดิน' : 'ราตรีใต้แสงดาว';
-      const companionThLabel = companion === 'shiba' ? '🐕 ชิบะ' : companion === 'cat' ? '🐈 แมวส้ม' : companion === 'bunny' ? '🐇 กระต่าย' : '🏃‍♀️ วิ่งเดี่ยว';
-      pctx.fillText(`เส้นทาง: ${curStageCfg.name} (${curStageCfg.rangeKm})  •  บรรยากาศ: ${themeThLabel}  •  เพื่อนร่วมทาง: ${companionThLabel}  •  โดย ${activeProfile.name || 'Athlete'}`, 55, metaBaseY + 36);
-
-      const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      pctx.fillStyle = '#A0958B';
-      pctx.font = '11px ui-monospace, monospace';
-      pctx.fillText(`บันทึกเมื่อ: ${dateStr}`, 55, metaBaseY + 62);
-
-      // Right Side: 4 Elegant Metric Stat Badges
-      const statCardW = 105;
-      const statCardH = 68;
-      const statCards = [
-        { label: 'ระยะทาง', value: `${(metrics.distanceMeters / 1000).toFixed(2)}`, unit: 'km', color: '#3B664E' },
-        { label: 'เวลาวิ่ง', value: formatDuration(metrics.elapsedSeconds), unit: '', color: '#2C2621' },
-        { label: 'เพซเฉลี่ย', value: formatPace(metrics.speedKmh > 0.5 ? 60 / metrics.speedKmh : 0), unit: '/km', color: '#B67A28' },
-        { label: 'แคลอรี', value: `${metrics.caloriesBurned}`, unit: 'kcal', color: '#B85737' }
-      ];
-
-      const startStatX = 1200 - 55 - (statCards.length * (statCardW + 12));
-      statCards.forEach((c, idx) => {
-        const cx = startStatX + idx * (statCardW + 12);
-        const cy = metaBaseY;
-
-        pctx.fillStyle = '#FFFFFF';
-        pctx.beginPath();
-        pctx.roundRect(cx, cy, statCardW, statCardH, 12);
-        pctx.fill();
-
-        pctx.strokeStyle = '#EBE4DA';
-        pctx.lineWidth = 1.2;
-        pctx.stroke();
-
-        pctx.fillStyle = '#8C827A';
-        pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
-        pctx.textAlign = 'center';
-        pctx.fillText(c.label, cx + statCardW / 2, cy + 18);
-
-        pctx.fillStyle = c.color;
-        pctx.font = 'bold 17px ui-monospace, monospace';
-        pctx.fillText(c.value, cx + statCardW / 2, cy + 40);
-
-        if (c.unit) {
-          pctx.fillStyle = '#A0958B';
-          pctx.font = '8px ui-sans-serif, system-ui, sans-serif';
-          pctx.fillText(c.unit, cx + statCardW / 2, cy + 54);
-        }
-      });
-
-      // Bottom Watermark
-      pctx.fillStyle = '#C2B7AA';
-      pctx.font = 'italic 10px ui-sans-serif, system-ui, sans-serif';
-      pctx.textAlign = 'right';
-      pctx.fillText('Treadmill Tracker — Scenic Journey Edition', 1140, 765);
-
-      // 5. Generate High-Res Image & Handle iPad / Desktop Safely
-      const dataUrl = postCanvas.toDataURL('image/png');
-      const now = new Date();
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-      const fileName = `treadmill-postcard-${fileDate}.png`;
-
-      // Always set preview URL so the user immediately sees their postcard
-      setPostcardPreviewUrl(dataUrl);
-      setPostcardFileName(fileName);
-
-      postCanvas.toBlob(async (blob) => {
-        if (!blob) return;
-        setPostcardBlob(blob);
-
-        const isIOS =
-          /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-        if (isIOS) {
-          // On iOS/iPadOS, attempt native share sheet to save directly to Photos without navigating away
-          try {
-            const file = new File([blob], fileName, { type: 'image/png' });
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({
-                files: [file],
-                title: 'Treadmill Scenic Postcard',
-                text: 'โปสการ์ดความทรงจำการวิ่ง Scenic Journey',
-              });
-              setMilestoneToast('📸 บันทึกภาพโปสการ์ดสำเร็จแล้ว!');
-              setTimeout(() => setMilestoneToast(null), 4000);
-            }
-          } catch (shareErr) {
-            console.log('Native share cancelled or unavailable:', shareErr);
-          }
-        } else {
-          // Desktop: Safe programmatic download without navigating away
-          try {
-            const a = document.createElement('a');
-            a.href = dataUrl;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setMilestoneToast('📸 บันทึกภาพโปสการ์ดความทรงจำสำเร็จแล้ว!');
-            setTimeout(() => setMilestoneToast(null), 4000);
-          } catch (err) {
-            console.error('Download error:', err);
-          }
-        }
-      }, 'image/png');
-    } catch (err) {
-      console.error('Failed to capture scenic postcard:', err);
-    } finally {
-      setIsCapturingPostcard(false);
-    }
+    renderPostcardFromSnapshot(format);
+    setIsCapturingPostcard(false);
   };
 
   const handleSelectWeather = (w: ScenicWeather) => {
@@ -1074,14 +1400,15 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     }
 
     const newlyUnlocked: AchievementItem[] = [];
+    const persistentUnlocked = new Set(getUnlockedAchievementIds(activeProfile.id));
 
     for (const ach of ACHIEVEMENT_CATALOG) {
-      if (unlockedInSessionRef.current.has(ach.id)) continue;
+      if (persistentUnlocked.has(ach.id) || unlockedInSessionRef.current.has(ach.id)) continue;
 
       try {
         if (ach.checkUnlock(metrics, sessionState)) {
           unlockedInSessionRef.current.add(ach.id);
-          saveUnlockedAchievementId(ach.id);
+          saveUnlockedAchievementId(ach.id, activeProfile.id);
           newlyUnlocked.push(ach);
         }
       } catch (err) {
@@ -1091,7 +1418,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
 
     if (newlyUnlocked.length > 0) {
       setAchievementQueue((prev) => [...prev, ...newlyUnlocked]);
-      setUnlockedCount(getUnlockedAchievementIds().length);
+      setUnlockedCount(getUnlockedAchievementIds(activeProfile.id).length);
 
       // Trigger signature Steam double bell chime!
       if (soundEnabled) {
@@ -1105,7 +1432,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     weather,
     zenMode,
     isOpen,
-    soundEnabled
+    soundEnabled,
+    activeProfile.id
   ]);
 
   // Soft footstep sound synthesis synchronized with runner cadence
@@ -3999,6 +4327,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         isOpen={showGoshuinModal}
         onClose={() => setShowGoshuinModal(false)}
         sessionUnlockedIds={unlockedInSessionRef.current}
+        activeProfile={activeProfile}
       />
 
       {/* SCENIC POSTCARD PREVIEW & DIRECT SAVE MODAL (iPad & Mobile Safe) */}
@@ -4017,10 +4346,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                 <span className="text-xl">📸</span>
                 <div>
                   <h3 className="text-base sm:text-lg font-black text-[#2C2621]">
-                    โปสการ์ดความทรงจำ Scenic Run
+                    บันทึกภาพความทรงจำ Scenic Run
                   </h3>
                   <p className="text-[11px] text-[#8C827A]">
-                    ภาพความทรงจำการออกกำลังกายพร้อมตราประทับแห่งความเพียร
+                    ภาพความทรงจำพร้อมสถิติวิ่งและตราประทับ สำหรับแชร์ลง Instagram Story หรือบันทึกเก็บไว้
                   </p>
                 </div>
               </div>
@@ -4034,19 +4363,47 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
               </button>
             </div>
 
-            {/* Image Preview */}
-            <div className="relative rounded-2xl overflow-hidden shadow-cozy-lg border border-[#EDE6DC] bg-white">
+            {/* Format Switcher Tabs: 9:16 IG Story vs 3:2 Landscape */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#EDE6DC]/80 rounded-2xl w-fit">
+              <button
+                type="button"
+                onClick={() => renderPostcardFromSnapshot('story')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  postcardFormat === 'story'
+                    ? 'bg-[#52796F] text-white shadow-cozy-sm'
+                    : 'text-[#6B635B] hover:text-[#2C2621]'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>สตอรี่แนวตั้ง (9:16 IG Story)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => renderPostcardFromSnapshot('landscape')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  postcardFormat === 'landscape'
+                    ? 'bg-[#52796F] text-white shadow-cozy-sm'
+                    : 'text-[#6B635B] hover:text-[#2C2621]'
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>โปสการ์ดแนวนอน (3:2)</span>
+              </button>
+            </div>
+
+            {/* Image Preview Container */}
+            <div className="relative rounded-2xl overflow-hidden shadow-cozy-lg border border-[#EDE6DC] bg-[#F7F4EE] flex items-center justify-center p-2 sm:p-3 max-h-[52vh]">
               <img 
                 src={postcardPreviewUrl} 
                 alt="Scenic Postcard" 
-                className="w-full h-auto block select-auto pointer-events-auto"
+                className="max-h-[48vh] w-auto max-w-full object-contain rounded-xl block select-auto pointer-events-auto shadow-md"
               />
             </div>
 
             {/* Action Buttons & iPad Tip */}
             <div className="space-y-2 pt-1">
               <p className="text-[11px] text-[#8C827A] text-center sm:text-left">
-                💡 <span className="font-semibold text-[#5A5047]">บน iPad/iPhone:</span> แตะภาพค้างไว้ (Long Press) เพื่อเลือก <span className="text-[#C46849] font-bold">"บันทึกรูปภาพ" (Save to Photos)</span> ได้โดยตรง
+                💡 <span className="font-semibold text-[#5A5047]">บน iPad/iPhone:</span> แตะภาพค้างไว้ (Long Press) เพื่อเลือก <span className="text-[#C46849] font-bold">"บันทึกรูปภาพ" (Save to Photos)</span> หรือกดปุ่มแชร์เพื่อลง Instagram Story ได้ทันที
               </p>
 
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -4060,8 +4417,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                         if (navigator.canShare && navigator.canShare({ files: [file] })) {
                           await navigator.share({
                             files: [file],
-                            title: 'Treadmill Scenic Postcard',
-                            text: 'โปสการ์ดความทรงจำการวิ่ง Scenic Journey'
+                            title: 'Treadmill Scenic Run Story',
+                            text: 'ภาพความทรงจำการวิ่ง Scenic Journey'
                           });
                         }
                       } catch (e) {
@@ -4071,7 +4428,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                     className="flex-1 sm:flex-initial px-4 py-2 rounded-2xl bg-[#52796F] hover:bg-[#3B664E] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer"
                   >
                     <Share2 className="w-4 h-4" />
-                    <span>บันทึกรูปภาพ / แชร์</span>
+                    <span>แชร์ลง Instagram Story / บันทึกรูป</span>
                   </button>
                 )}
 
@@ -4081,7 +4438,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                   className="flex-1 sm:flex-initial px-4 py-2 rounded-2xl bg-[#C46849] hover:bg-[#B3392B] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer text-center"
                 >
                   <Download className="w-4 h-4" />
-                  <span>ดาวน์โหลด .PNG</span>
+                  <span>ดาวน์โหลด {postcardFormat === 'story' ? 'IG Story (9:16)' : 'โปสการ์ด (3:2)'}</span>
                 </a>
 
                 <button

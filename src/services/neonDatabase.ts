@@ -151,6 +151,16 @@ class NeonDatabaseService {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `;
+
+    // Create treadmill_achievements table in Neon (Per-Profile Isolated Achievements)
+    await sql`
+      CREATE TABLE IF NOT EXISTS treadmill_achievements (
+        user_id TEXT NOT NULL,
+        achievement_id TEXT NOT NULL,
+        unlocked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        PRIMARY KEY (user_id, achievement_id)
+      );
+    `;
   }
 
   // ==========================================
@@ -281,6 +291,43 @@ class NeonDatabaseService {
   }
 
   // ==========================================
+  // ACHIEVEMENTS CRUD (Per-Profile Isolation)
+  // ==========================================
+  public async getAchievements(userId: string): Promise<string[]> {
+    if (this.isConfigured() && userId) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        const rows = await sql`
+          SELECT achievement_id FROM treadmill_achievements WHERE user_id = ${userId};
+        `;
+        if (rows && rows.length > 0) {
+          return rows.map((r: any) => r.achievement_id);
+        }
+      } catch (err) {
+        console.warn('Neon getAchievements error:', err);
+      }
+    }
+    return [];
+  }
+
+  public async saveAchievement(userId: string, achievementId: string): Promise<void> {
+    if (this.isConfigured() && userId && achievementId) {
+      try {
+        const sql = this.getClient();
+        await this.initSchema();
+        await sql`
+          INSERT INTO treadmill_achievements (user_id, achievement_id, unlocked_at)
+          VALUES (${userId}, ${achievementId}, NOW())
+          ON CONFLICT (user_id, achievement_id) DO NOTHING;
+        `;
+      } catch (err) {
+        console.error('Neon saveAchievement error:', err);
+      }
+    }
+  }
+
+  // ==========================================
   // PROGRAM CRUD (100% Neon Database Driven)
   // ==========================================
   public async getPrograms(): Promise<WorkoutProgram[]> {
@@ -396,13 +443,13 @@ class NeonDatabaseService {
             user_bmi = EXCLUDED.user_bmi;
         `;
 
-        return { success: true, mode: 'neon', message: `บันทึกข้อมูลของ ${workout.user_name || 'ผู้ใช้งาน'} ขึ้น Neon Cloud เรียบร้อย!` };
+        return { success: true, mode: 'neon', message: `บันทึกสถิติของ ${workout.user_name || 'ผู้ใช้งาน'} เรียบร้อยแล้ว` };
       } catch (err: any) {
         console.warn('Could not save to Neon, saved locally:', err);
         return { 
           success: true, 
           mode: 'local', 
-          message: `บันทึกลงในเครื่องแล้ว (ไม่สามารถส่งเข้า Neon ได้: ${err.message})` 
+          message: `บันทึกสถิติลงในเครื่องเรียบร้อยแล้ว` 
         };
       }
     }

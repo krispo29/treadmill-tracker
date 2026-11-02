@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Timer, 
   MapPin, 
@@ -7,11 +7,13 @@ import {
   Mountain, 
   Check, 
   History, 
-  X
+  X,
+  Camera
 } from 'lucide-react';
 import type { WorkoutRecord } from '../types/database';
 import { formatDuration, getCalorieReward } from '../services/calculations';
 import { audioCoach } from '../services/audioCoach';
+import { WorkoutPostcardModal } from './WorkoutPostcardModal';
 
 interface WorkoutRecapModalProps {
   isOpen: boolean;
@@ -26,6 +28,7 @@ export const WorkoutRecapModal: React.FC<WorkoutRecapModalProps> = ({
   onClose,
   onViewHistory,
 }) => {
+  const [showPostcard, setShowPostcard] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Trigger celebration fanfare sound and voice congratulations
@@ -261,16 +264,16 @@ export const WorkoutRecapModal: React.FC<WorkoutRecapModalProps> = ({
           </div>
         </div>
 
-        {/* Neon Database Cloud Auto-Save Badge */}
+        {/* Workout Saved Badge */}
         <div className="my-3 p-3.5 rounded-2xl bg-[#EAF2EC] border border-[#CDE0D3] flex items-center justify-between text-xs text-[#3B664E] shadow-cozy-sm">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-xl bg-[#52796F] text-white">
               <Check className="w-4 h-4" />
             </div>
             <div>
-              <span className="font-bold block">บันทึกอัตโนมัติขึ้น Neon PostgreSQL เรียบร้อย</span>
-              <span className="text-[10px] text-[#3B664E]/80 font-mono">
-                ผูกสถิติกับโปรไฟล์ {record.user_name} • แยกประวัติรายบุคคล 100%
+              <span className="font-bold block">บันทึกสถิติการวิ่งเรียบร้อยแล้ว</span>
+              <span className="text-[10px] text-[#3B664E]/80">
+                ผูกสถิติกับโปรไฟล์ {record.user_name} • บันทึกสถิติแยกรายบุคคลเรียบร้อย
               </span>
             </div>
           </div>
@@ -279,6 +282,16 @@ export const WorkoutRecapModal: React.FC<WorkoutRecapModalProps> = ({
         {/* Bottom Actions */}
         <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-[#EDE6DC]">
           <button
+            type="button"
+            onClick={() => setShowPostcard(true)}
+            className="flex-1 py-3 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-[#FDF0EC] hover:bg-[#F9E2DA] text-[#C46849] border border-[#F6D5C9] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 shadow-cozy-sm"
+          >
+            <Camera className="w-4 h-4 text-[#C46849]" />
+            <span>สตอรี่ IG / โปสการ์ด</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => {
               onClose();
               onViewHistory();
@@ -286,17 +299,25 @@ export const WorkoutRecapModal: React.FC<WorkoutRecapModalProps> = ({
             className="flex-1 py-3 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-[#FAF7F2] hover:bg-[#F3EFE6] text-[#5A5047] border border-[#EDE6DC] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 shadow-cozy-sm"
           >
             <History className="w-4 h-4 text-[#52796F]" />
-            <span>ดูประวัติทั้งหมด (View History)</span>
+            <span>ดูประวัติทั้งหมด</span>
           </button>
 
           <button
+            type="button"
             onClick={onClose}
             className="flex-1 py-3 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-[#52796F] hover:bg-[#43675E] text-white flex items-center justify-center gap-2 shadow-cozy-sm transition-all cursor-pointer active:scale-95"
           >
             <Check className="w-4 h-4 stroke-[3]" />
-            <span>ปิดการ์ด / เริ่มรอบใหม่</span>
+            <span>ปิดการ์ด</span>
           </button>
         </div>
+
+        {/* Postcard & IG Story Modal */}
+        <WorkoutPostcardModal
+          isOpen={showPostcard}
+          onClose={() => setShowPostcard(false)}
+          record={record}
+        />
 
       </div>
     </div>

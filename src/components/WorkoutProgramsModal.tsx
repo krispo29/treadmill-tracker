@@ -81,7 +81,7 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
     const customProgram: WorkoutProgram = {
       id: `custom_${Date.now()}`,
       title: customTitle || 'Custom Workout',
-      subtitle: 'โปรแกรมออกแบบเอง (บันทึกบน Neon DB)',
+      subtitle: 'โปรแกรมที่คุณออกแบบเอง',
       category: 'custom',
       difficulty: 'Intermediate',
       badge: '⚙️ CUSTOM',
@@ -99,7 +99,7 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
 
   const handleDeleteProgram = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('คุณต้องการลบโปรแกรมนี้ออกจาก Neon DB ใช่หรือไม่?')) {
+    if (window.confirm('คุณต้องการลบโปรแกรมนี้ใช่หรือไม่?')) {
       await neonDatabase.deleteProgram(id);
       const updated = await neonDatabase.getPrograms();
       setPrograms(updated);
@@ -168,7 +168,7 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
                 : 'bg-[#FAF7F2] text-[#5A5047] border-[#EDE6DC] hover:bg-[#F3EFE6]'
             }`}
           >
-            คอร์สฝึกจาก Neon Database ({programs.length} โปรแกรม)
+            คอร์สฝึกวิ่งทั้งหมด ({programs.length} โปรแกรม)
           </button>
           <button
             onClick={() => setActiveTab('custom')}
@@ -188,11 +188,11 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
             {isLoading ? (
               <div className="flex flex-col items-center justify-center p-12 text-[#8C827A] gap-2">
                 <Loader2 className="w-6 h-6 animate-spin text-[#52796F]" />
-                <span className="text-xs">กำลังโหลดคอร์สฝึกจาก Neon PostgreSQL...</span>
+                <span className="text-xs">กำลังโหลดคอร์สฝึกซ้อม...</span>
               </div>
             ) : programs.length === 0 ? (
               <div className="text-center p-8 text-[#8C827A] text-xs">
-                ยังไม่มีโปรแกรมในฐานข้อมูล
+                ยังไม่มีคอร์สฝึกซ้อมในขณะนี้
               </div>
             ) : (
               programs.map((prog) => (
@@ -241,7 +241,7 @@ export const WorkoutProgramsModal: React.FC<WorkoutProgramsModalProps> = ({
                       <button
                         onClick={(e) => handleDeleteProgram(prog.id, e)}
                         className="p-2 rounded-xl text-[#8C827A] hover:text-[#B94A4A] hover:bg-[#FDF0F0] cursor-pointer"
-                        title="ลบโปรแกรมที่สร้างเองนี้ออกจาก Neon DB"
+                        title="ลบโปรแกรมที่สร้างเองนี้"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

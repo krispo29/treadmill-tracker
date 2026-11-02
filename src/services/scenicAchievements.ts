@@ -1,4 +1,5 @@
 import type { TreadmillMetrics } from '../types/treadmill';
+import { neonDatabase } from './neonDatabase';
 
 export type AchievementCategory = 'distance' | 'food' | 'steps' | 'challenge' | 'secret';
 export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum';
@@ -347,24 +348,96 @@ export const ACHIEVEMENT_CATALOG: AchievementItem[] = [
   },
 ];
 
-// Persistent storage helpers
-const STORAGE_KEY = 'scenic_achievements_unlocked_v1';
+// Persistent storage helpers (Profile-isolated with Neon DB synchronization)
+const LEGACY_STORAGE_KEY = 'scenic_achievements_unlocked_v1';
 
-export function getUnlockedAchievementIds(): string[] {
+export function getProfileAchievementStorageKey(profileId?: string): string {
+  const safeId = profileId && profileId.trim().length > 0 ? profileId.trim() : 'default';
+  return `scenic_achievements_profile_${safeId}_v2`;
+}
+
+export function getUnlockedAchievementIds(profileId?: string): string[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const key = getProfileAchievementStorageKey(profileId);
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+
+    // Migration logic: If this is the primary profile (e.g. 'p_runner1' Mike)
+    // and no profile-specific key exists yet, migrate old achievements so Mike doesn't lose progress
+    if (profileId === 'p_runner1' || !profileId) {
+      const oldRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (oldRaw) {
+        try {
+          const parsed = JSON.parse(oldRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            localStorage.setItem(key, oldRaw);
+            // Also sync to Neon DB in background
+            if (profileId) {
+              parsed.forEach((achId: string) => {
+                neonDatabase.saveAchievement(profileId, achId).catch(() => {});
+              });
+            }
+            return parsed;
+          }
+        } catch {}
+      }
+    }
+    return [];
   } catch {
     return [];
   }
 }
 
-export function saveUnlockedAchievementId(id: string): void {
+export function saveUnlockedAchievementId(id: string, profileId?: string): void {
   try {
-    const current = new Set(getUnlockedAchievementIds());
+    const key = getProfileAchievementStorageKey(profileId);
+    const current = new Set(getUnlockedAchievementIds(profileId));
     current.add(id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(current)));
+    localStorage.setItem(key, JSON.stringify(Array.from(current)));
+
+    // Asynchronously persist to Neon PostgreSQL per profile
+    if (profileId) {
+      neonDatabase.saveAchievement(profileId, id).catch(() => {});
+    }
   } catch {}
+}
+
+/**
+ * Syncs achievements between Neon PostgreSQL and localStorage for a specific profile
+ */
+export async function syncProfileAchievements(profileId: string): Promise<string[]> {
+  if (!profileId) return getUnlockedAchievementIds();
+  try {
+    const localIds = new Set(getUnlockedAchievementIds(profileId));
+    const remoteIds = await neonDatabase.getAchievements(profileId);
+
+    // Merge remote into local
+    let hasNew = false;
+    for (const rId of remoteIds) {
+      if (!localIds.has(rId)) {
+        localIds.add(rId);
+        hasNew = true;
+      }
+    }
+
+    // Merge local into remote
+    for (const lId of localIds) {
+      if (!remoteIds.includes(lId)) {
+        await neonDatabase.saveAchievement(profileId, lId).catch(() => {});
+      }
+    }
+
+    const merged = Array.from(localIds);
+    if (hasNew) {
+      const key = getProfileAchievementStorageKey(profileId);
+      localStorage.setItem(key, JSON.stringify(merged));
+    }
+    return merged;
+  } catch {
+    return getUnlockedAchievementIds(profileId);
+  }
 }
 
 /**

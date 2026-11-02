@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Trophy, Lock, CheckCircle2 } from 'lucide-react';
+import type { UserProfile } from '../types/treadmill';
 import {
   ACHIEVEMENT_CATALOG,
   getUnlockedAchievementIds,
@@ -9,20 +10,22 @@ interface ScenicGoshuinModalProps {
   isOpen: boolean;
   onClose: () => void;
   sessionUnlockedIds: Set<string>;
+  activeProfile?: UserProfile;
 }
 
 export const ScenicGoshuinModal: React.FC<ScenicGoshuinModalProps> = ({
   isOpen,
   onClose,
   sessionUnlockedIds,
+  activeProfile,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'unlocked' | 'locked'>('all');
 
   if (!isOpen) return null;
 
-  const persistentUnlockedIds = new Set(getUnlockedAchievementIds());
-  // An achievement is unlocked if it's saved in localStorage OR unlocked in the current session
+  const persistentUnlockedIds = new Set(getUnlockedAchievementIds(activeProfile?.id));
+  // An achievement is unlocked if it's saved in this profile's storage OR unlocked in the current session
   const isUnlocked = (id: string) => persistentUnlockedIds.has(id) || sessionUnlockedIds.has(id);
 
   const totalCount = ACHIEVEMENT_CATALOG.length;
@@ -73,11 +76,13 @@ export const ScenicGoshuinModal: React.FC<ScenicGoshuinModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-xl font-black tracking-wide text-white flex items-center gap-1.5 font-serif">
                   <span>御朱印帳</span>
-                  <span className="text-[#D4AF37] text-xs sm:text-sm font-sans font-bold">• GOSHUINCHO</span>
+                  <span className="text-[#D4AF37] text-xs sm:text-sm font-sans font-bold">
+                    • GOSHUINCHO {activeProfile ? `(${activeProfile.name})` : ''}
+                  </span>
                 </h3>
               </div>
               <p className="text-[11px] sm:text-xs text-[#D5CEC5]">
-                สมุดสะสมตราประทับแห่งความเพียร (Treadmill Journey Achievements)
+                สมุดสะสมตราประทับแห่งความเพียรของ {activeProfile?.name || 'นักวิ่ง'} {activeProfile?.avatar || '🏃‍♂️'}
               </p>
             </div>
           </div>

@@ -98,7 +98,7 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({
               <span>จัดการโปรไฟล์ผู้ใช้งาน (Profiles)</span>
             </h2>
             <p className="text-xs text-[#8C827A]">
-              สลับผู้ใช้งานได้ใน 1 แตะ ไม่ต้องจำรหัสผ่าน สถิติและแคลอรี่จะบันทึกลง Neon DB แยกตามคนวิ่ง
+              สลับผู้ใช้งานได้ใน 1 แตะ ไม่ต้องจำรหัสผ่าน สถิติและแคลอรี่จะบันทึกแยกตามคนวิ่งโดยอัตโนมัติ
             </p>
           </div>
         </div>
