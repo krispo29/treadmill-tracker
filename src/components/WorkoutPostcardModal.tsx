@@ -96,7 +96,7 @@ function getOrLoadScenicAssets(): Promise<ScenicAssets> {
     });
   };
 
-  const v = '?v=20261102b';
+  const v = '?v=20261102c';
   assetLoadingPromise = Promise.all([
     loadImg(`/assets/scenic/runner-female-run.png${v}`),
     loadImg(`/assets/scenic/runner-female-idle.png${v}`),
