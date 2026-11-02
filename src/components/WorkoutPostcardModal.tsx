@@ -11,6 +11,155 @@ export interface WorkoutPostcardModalProps {
   sourceCanvas?: HTMLCanvasElement | null;
 }
 
+// Stage and Theme resolvers
+export const getStageForDistance = (distanceMeters: number): 'kamakura' | 'kyoto' | 'hokkaido' | 'tokyo' => {
+  if (distanceMeters >= 7500) return 'tokyo';
+  if (distanceMeters >= 5000) return 'hokkaido';
+  if (distanceMeters >= 2500) return 'kyoto';
+  return 'kamakura';
+};
+
+export const getThemeForCurrentTime = (date: Date = new Date()): 'sakura' | 'countryside' | 'sunset' | 'night' => {
+  const hour = date.getHours();
+  if (hour >= 17 && hour < 19) return 'sunset';
+  if (hour >= 19 || hour < 6) return 'night';
+  if (hour >= 6 && hour < 11) return 'sakura';
+  return 'countryside';
+};
+
+/**
+ * Smart Sprite Drawer:
+ * Slices out exactly 1 single cell from a sprite sheet grid (e.g. 4x4)
+ */
+function drawSprite(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  defaultCols: number,
+  defaultRows: number,
+  cellCol: number,
+  cellRow: number,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number
+) {
+  const isSheet = image.naturalWidth >= 200;
+  const cols = isSheet ? defaultCols : 1;
+  const rows = isSheet ? defaultRows : 1;
+  const sw = image.naturalWidth / cols;
+  const sh = image.naturalHeight / rows;
+  const sx = (cellCol % cols) * sw;
+  const sy = (cellRow % rows) * sh;
+  ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
+// Asset Cache Interface
+interface ScenicAssets {
+  runnerRun: HTMLImageElement | null;
+  runnerIdle: HTMLImageElement | null;
+  bgCloud: HTMLImageElement | null;
+  bgFuji: HTMLImageElement | null;
+  bgMountains: HTMLImageElement | null;
+  bgHills: HTMLImageElement | null;
+  bgSunSunset: HTMLImageElement | null;
+  bgMoonCrescent: HTMLImageElement | null;
+  petShiba: HTMLImageElement | null;
+  propMilestone: HTMLImageElement | null;
+  encounterLantern: HTMLImageElement | null;
+  landmarkTorii: HTMLImageElement | null;
+  landmarkSakura: HTMLImageElement | null;
+  bgKyotoBamboo: HTMLImageElement | null;
+  bgKyotoPagoda: HTMLImageElement | null;
+  bgHokkaidoSnow: HTMLImageElement | null;
+  bgHokkaidoLavender: HTMLImageElement | null;
+  bgTokyoTower: HTMLImageElement | null;
+  bgTokyoSkyline: HTMLImageElement | null;
+}
+
+let cachedAssets: ScenicAssets | null = null;
+let assetLoadingPromise: Promise<ScenicAssets> | null = null;
+
+function getOrLoadScenicAssets(): Promise<ScenicAssets> {
+  if (cachedAssets) return Promise.resolve(cachedAssets);
+  if (assetLoadingPromise) return assetLoadingPromise;
+
+  const loadImg = (src: string): Promise<HTMLImageElement | null> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+    });
+  };
+
+  assetLoadingPromise = Promise.all([
+    loadImg('/assets/scenic/runner-female-run.png'),
+    loadImg('/assets/scenic/runner-female-idle.png'),
+    loadImg('/assets/scenic/bg-cloud.png'),
+    loadImg('/assets/scenic/bg-mountain-fuji.png'),
+    loadImg('/assets/scenic/bg-mountains-distant.png'),
+    loadImg('/assets/scenic/bg-hills-green.png'),
+    loadImg('/assets/scenic/bg-sun-sunset.png'),
+    loadImg('/assets/scenic/bg-moon-crescent.png'),
+    loadImg('/assets/scenic/pet-shiba-run.png'),
+    loadImg('/assets/scenic/prop-milestone-post.png'),
+    loadImg('/assets/scenic/encounter-lantern.png'),
+    loadImg('/assets/scenic/landmark-torii-gate.png'),
+    loadImg('/assets/scenic/landmark-sakura-tree.png'),
+    loadImg('/assets/scenic/bg-hills-kyoto-bamboo.png'),
+    loadImg('/assets/scenic/bg-landmark-kyoto-pagoda.png'),
+    loadImg('/assets/scenic/bg-mountains-hokkaido-snow.png'),
+    loadImg('/assets/scenic/bg-hills-hokkaido-lavender.png'),
+    loadImg('/assets/scenic/bg-landmark-tokyo-tower.png'),
+    loadImg('/assets/scenic/bg-skyline-tokyo-retro.png'),
+  ]).then(([
+    runnerRun,
+    runnerIdle,
+    bgCloud,
+    bgFuji,
+    bgMountains,
+    bgHills,
+    bgSunSunset,
+    bgMoonCrescent,
+    petShiba,
+    propMilestone,
+    encounterLantern,
+    landmarkTorii,
+    landmarkSakura,
+    bgKyotoBamboo,
+    bgKyotoPagoda,
+    bgHokkaidoSnow,
+    bgHokkaidoLavender,
+    bgTokyoTower,
+    bgTokyoSkyline,
+  ]) => {
+    cachedAssets = {
+      runnerRun,
+      runnerIdle,
+      bgCloud,
+      bgFuji,
+      bgMountains,
+      bgHills,
+      bgSunSunset,
+      bgMoonCrescent,
+      petShiba,
+      propMilestone,
+      encounterLantern,
+      landmarkTorii,
+      landmarkSakura,
+      bgKyotoBamboo,
+      bgKyotoPagoda,
+      bgHokkaidoSnow,
+      bgHokkaidoLavender,
+      bgTokyoTower,
+      bgTokyoSkyline,
+    };
+    return cachedAssets;
+  });
+
+  return assetLoadingPromise;
+}
+
 export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
   isOpen,
   onClose,
@@ -23,17 +172,21 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
   const [fileName, setFileName] = useState<string>('');
 
   useEffect(() => {
+    let isCancelled = false;
     if (!isOpen || !record) {
       setPreviewUrl(null);
       setFileBlob(null);
       return;
     }
-    renderCard(format);
+    renderCard(format, () => isCancelled);
+    return () => {
+      isCancelled = true;
+    };
   }, [isOpen, record, format]);
 
   if (!isOpen || !record) return null;
 
-  function renderCard(currentFormat: 'story' | 'landscape') {
+  async function renderCard(currentFormat: 'story' | 'landscape', isCancelled?: () => boolean) {
     if (!record) return;
 
     try {
@@ -41,19 +194,24 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       const pctx = postCanvas.getContext('2d');
       if (!pctx) return;
 
-      // Determine scenic viewport source: live canvas or procedural scenic illustration
+      // Determine scenic viewport source: live canvas or authentic scenic illustration using real game assets
       let scenicSrc: HTMLCanvasElement;
       if (sourceCanvas) {
         scenicSrc = sourceCanvas;
       } else {
+        const assets = await getOrLoadScenicAssets();
+        if (isCancelled && isCancelled()) return;
+
         scenicSrc = document.createElement('canvas');
         scenicSrc.width = 960;
         scenicSrc.height = 720;
         const sctx = scenicSrc.getContext('2d');
         if (sctx) {
-          drawProceduralScenicView(sctx, 960, 720, record);
+          drawAuthenticScenicView(sctx, 960, 720, record, assets);
         }
       }
+
+      if (isCancelled && isCancelled()) return;
 
       if (currentFormat === 'story') {
         drawStoryCard(postCanvas, pctx, scenicSrc, record);
@@ -148,7 +306,7 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     pctx.fill();
     pctx.restore();
 
-    // Clip & draw scenic snapshot
+    // Clip and draw scenic snapshot
     pctx.save();
     pctx.beginPath();
     pctx.roundRect(photoX, photoY, photoW, photoH, 24);
@@ -162,7 +320,10 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     pctx.roundRect(photoX, photoY, photoW, photoH, 24);
     pctx.stroke();
 
-    // 3.1 Postal Seal Stamp (Hanko 🗻 富士山)
+    // 3.1 Postal Seal Stamp (Hanko)
+    const stageId = getStageForDistance(rec.distance_meters || 0);
+    const sealTitle = stageId === 'tokyo' ? '🗼 東京' : stageId === 'hokkaido' ? '🌸 北海道' : stageId === 'kyoto' ? '⛩️ 京都' : '🗻 富士山';
+
     const sealX = photoX + photoW - 90;
     const sealY = photoY + 80;
     pctx.save();
@@ -184,17 +345,18 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     pctx.font = '900 14px "Noto Serif JP", serif';
     pctx.textAlign = 'center';
     pctx.textBaseline = 'middle';
-    pctx.fillText('🗻 富士山', 0, -18);
+    pctx.fillText(sealTitle, 0, -18);
     pctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
     pctx.fillText('SCENIC RUN', 0, 4);
     pctx.font = 'bold 9px ui-monospace, monospace';
     pctx.fillText(new Date(rec.created_at || Date.now()).toLocaleDateString('ja-JP').replace(/\//g, '.'), 0, 22);
     pctx.restore();
 
-    // 3.2 Goshuin Seal Stamp
+    // 3.2 Goshuin Achievement Seal Stamp (if any unlocked)
     const userAchIds = getUnlockedAchievementIds(rec.user_id);
-    const latestAchId = userAchIds[userAchIds.length - 1] || 'dist_1k';
+    const latestAchId = userAchIds[userAchIds.length - 1];
     const latestAch = ACHIEVEMENT_CATALOG.find((a) => a.id === latestAchId);
+
     if (latestAch) {
       const achSealX = photoX + 90;
       const achSealY = photoY + 80;
@@ -225,7 +387,7 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       pctx.restore();
     }
 
-    // 4. Hero Primary Distance Card (Bold numbers for Instagram Stories!)
+    // 4. Hero Primary Distance Card
     const heroY = 930;
     pctx.fillStyle = '#FFFFFF';
     pctx.beginPath();
@@ -278,75 +440,73 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
 
     pctx.fillStyle = '#9A641F';
     pctx.font = 'bold 15px ui-sans-serif, system-ui, sans-serif';
-    pctx.fillText(calReward.foodName.slice(0, 15), badgeX + badgeW / 2, badgeY + 85);
+    pctx.fillText(calReward.foodName, badgeX + badgeW / 2, badgeY + 105);
 
-    pctx.fillStyle = '#B67A28';
-    pctx.font = '600 13px ui-sans-serif, system-ui, sans-serif';
-    pctx.fillText(`เบิร์น ${Math.round(rec.calories_burned)} kcal`, badgeX + badgeW / 2, badgeY + 115);
+    pctx.fillStyle = '#B8860B';
+    pctx.font = '13px ui-sans-serif, system-ui, sans-serif';
+    pctx.fillText(`เบิร์นลบ ~${calReward.thresholdKcal} kcal`, badgeX + badgeW / 2, badgeY + 135);
 
-    // 5. Three Key Stats Badges (Time, Pace, Calories)
-    const statCardsY = 1185;
-    const statCardW = 300;
-    const statCardH = 185;
-    const statGap = 30;
+    // 5. 3-Card Secondary Metrics Grid (Time, Pace, Calories)
+    const subGridY = 1190;
+    const subCardGap = 20;
+    const subCardW = (photoW - subCardGap * 2) / 3;
+    const subCardH = 170;
 
-    const cards = [
+    const subMetrics = [
       {
         icon: '⏱️',
         label: 'เวลาวิ่ง (TIME)',
-        value: formatDuration(rec.duration_seconds),
+        val: formatDuration(rec.duration_seconds),
         unit: '',
         color: '#2C2621'
       },
       {
         icon: '⚡',
         label: 'เพซเฉลี่ย (PACE)',
-        value: formatPace(rec.avg_speed_kmh > 0.5 ? 60 / rec.avg_speed_kmh : 0),
+        val: formatPace(rec.avg_speed_kmh > 0.5 ? 60 / rec.avg_speed_kmh : 0),
         unit: '/km',
-        color: '#B67A28'
+        color: '#9A641F'
       },
       {
         icon: '🔥',
-        label: 'แคลอรี (KCAL)',
-        value: `${Math.round(rec.calories_burned)}`,
+        label: 'แคลอรี่ (KCAL)',
+        val: `${Math.round(rec.calories_burned)}`,
         unit: 'kcal',
-        color: '#B85737'
+        color: '#C46849'
       }
     ];
 
-    cards.forEach((c, i) => {
-      const cx = photoX + i * (statCardW + statGap);
-      const cy = statCardsY;
-
+    subMetrics.forEach((m, idx) => {
+      const cx = photoX + idx * (subCardW + subCardGap);
       pctx.fillStyle = '#FFFFFF';
       pctx.beginPath();
-      pctx.roundRect(cx, cy, statCardW, statCardH, 20);
+      pctx.roundRect(cx, subGridY, subCardW, subCardH, 20);
       pctx.fill();
-
       pctx.strokeStyle = '#EBE4DA';
-      pctx.lineWidth = 1.2;
+      pctx.lineWidth = 1.5;
       pctx.stroke();
 
       pctx.textAlign = 'center';
       pctx.textBaseline = 'top';
       pctx.fillStyle = '#8C827A';
-      pctx.font = 'bold 14px ui-sans-serif, system-ui, sans-serif';
-      pctx.fillText(`${c.icon} ${c.label}`, cx + statCardW / 2, cy + 24);
+      pctx.font = 'bold 13px ui-sans-serif, system-ui, sans-serif';
+      pctx.fillText(`${m.icon} ${m.label}`, cx + subCardW / 2, subGridY + 22);
 
-      pctx.fillStyle = c.color;
-      pctx.font = 'bold 36px ui-monospace, monospace';
-      pctx.fillText(c.value, cx + statCardW / 2, cy + 68);
+      pctx.fillStyle = m.color;
+      pctx.font = '900 44px ui-monospace, monospace';
+      pctx.fillText(m.val, cx + subCardW / 2, subGridY + 62);
 
-      if (c.unit) {
-        pctx.fillStyle = '#A0958B';
-        pctx.font = 'bold 14px ui-sans-serif, system-ui, sans-serif';
-        pctx.fillText(c.unit, cx + statCardW / 2, cy + 124);
+      if (m.unit) {
+        pctx.fillStyle = '#8C827A';
+        pctx.font = '600 13px ui-sans-serif, system-ui, sans-serif';
+        pctx.fillText(m.unit, cx + subCardW / 2, subGridY + 122);
       }
     });
 
-    // 6. Journey Route & Story Details Card
-    const storyCardY = 1395;
-    const storyCardH = 265;
+    // 6. Journey Story Narrative Card
+    const storyCardY = 1390;
+    const storyCardH = 270;
+
     pctx.fillStyle = '#FFFFFF';
     pctx.beginPath();
     pctx.roundRect(photoX, storyCardY, photoW, storyCardH, 24);
@@ -419,6 +579,9 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     pctx.strokeRect(photoX, photoY, photoW, photoH);
 
     // 3. Hanko Stamp
+    const stageId = getStageForDistance(rec.distance_meters || 0);
+    const sealTitle = stageId === 'tokyo' ? '🗼 東京' : stageId === 'hokkaido' ? '🌸 北海道' : stageId === 'kyoto' ? '⛩️ 京都' : '🗻 富士山';
+
     const sealX = photoX + photoW - 75;
     const sealY = photoY + 70;
     pctx.save();
@@ -440,7 +603,7 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     pctx.font = '900 13px "Noto Serif JP", serif';
     pctx.textAlign = 'center';
     pctx.textBaseline = 'middle';
-    pctx.fillText('🗻 富士山', 0, -18);
+    pctx.fillText(sealTitle, 0, -18);
     pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
     pctx.fillText('SCENIC RUN', 0, 4);
     pctx.font = 'bold 8px ui-monospace, monospace';
@@ -488,14 +651,15 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       pctx.lineWidth = 1.2;
       pctx.stroke();
 
-      pctx.fillStyle = '#8C827A';
-      pctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
       pctx.textAlign = 'center';
-      pctx.fillText(c.label, cx + statCardW / 2, cy + 18);
+      pctx.textBaseline = 'top';
+      pctx.fillStyle = '#8C827A';
+      pctx.font = 'bold 11px ui-sans-serif, system-ui, sans-serif';
+      pctx.fillText(c.label, cx + statCardW / 2, cy + 10);
 
       pctx.fillStyle = c.color;
-      pctx.font = 'bold 17px ui-monospace, monospace';
-      pctx.fillText(c.value, cx + statCardW / 2, cy + 40);
+      pctx.font = '900 18px ui-monospace, monospace';
+      pctx.fillText(c.value, cx + statCardW / 2, cy + 30);
 
       if (c.unit) {
         pctx.fillStyle = '#A0958B';
@@ -510,38 +674,39 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     pctx.fillText('Treadmill Tracker — Scenic Journey Edition', 1140, 765);
   }
 
-  // Draw Procedural Scenic Illustration for past runs without live canvas
-  function drawProceduralScenicView(
+  // Draw Authentic Scenic Illustration with Real Game Assets (Identical to live Scenic Run)
+  function drawAuthenticScenicView(
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
-    rec: WorkoutRecord
+    rec: WorkoutRecord,
+    assets: ScenicAssets
   ) {
     const date = new Date(rec.created_at || Date.now());
-    const hour = date.getHours();
+    const theme = getThemeForCurrentTime(date);
+    const stageId = getStageForDistance(rec.distance_meters || 0);
 
-    // 1. Sky Gradient based on hour of workout
+    // 1. SKY GRADIENT
     const skyGrad = ctx.createLinearGradient(0, 0, 0, height * 0.65);
     let sunColor = '#FFA07A';
     let sunGlow = 'rgba(255, 160, 122, 0.4)';
+    let isNight = false;
 
-    if (hour >= 16 && hour < 19) {
-      // Sunset
+    if (theme === 'sunset') {
       skyGrad.addColorStop(0, '#B84A39');
       skyGrad.addColorStop(0.35, '#E07A5F');
       skyGrad.addColorStop(0.7, '#F4A261');
       skyGrad.addColorStop(1, '#E9C46A');
       sunColor = '#FDE24F';
       sunGlow = 'rgba(253, 226, 79, 0.45)';
-    } else if (hour >= 19 || hour < 6) {
-      // Twilight / Night
-      skyGrad.addColorStop(0, '#1E1B4B');
-      skyGrad.addColorStop(0.5, '#312E81');
-      skyGrad.addColorStop(1, '#4338CA');
+    } else if (theme === 'night') {
+      isNight = true;
+      skyGrad.addColorStop(0, '#151932');
+      skyGrad.addColorStop(0.5, '#24224A');
+      skyGrad.addColorStop(1, '#3E3765');
       sunColor = '#FEF08A';
       sunGlow = 'rgba(254, 240, 138, 0.3)';
-    } else if (hour >= 6 && hour < 11) {
-      // Morning Sakura
+    } else if (theme === 'sakura') {
       skyGrad.addColorStop(0, '#D48175');
       skyGrad.addColorStop(0.4, '#F3B4A6');
       skyGrad.addColorStop(0.8, '#FCE4EC');
@@ -549,7 +714,7 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       sunColor = '#FFAA95';
       sunGlow = 'rgba(255, 170, 149, 0.4)';
     } else {
-      // Day
+      // Countryside / Daytime
       skyGrad.addColorStop(0, '#4A8094');
       skyGrad.addColorStop(0.5, '#7BA7B8');
       skyGrad.addColorStop(1, '#C7DFE8');
@@ -560,260 +725,300 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, width, height);
 
-    // 2. Stars for night
-    if (hour >= 19 || hour < 6) {
+    // 2. STARS (Night)
+    if (isNight) {
       ctx.fillStyle = '#FFFFFF';
-      for (let i = 0; i < 40; i++) {
-        const sx = (Math.sin(i * 99) * 0.5 + 0.5) * width;
-        const sy = (Math.cos(i * 33) * 0.5 + 0.5) * (height * 0.45);
-        const sr = (i % 3 === 0 ? 2 : 1.2);
+      for (let i = 0; i < 45; i++) {
+        const sx = ((i * 137.5) % width);
+        const sy = (((i * 97.3) % (height * 0.48)));
+        const sr = (i % 4 === 0 ? 2 : 1.2);
         ctx.beginPath();
         ctx.arc(sx, sy, sr, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
-    // 3. Sun or Moon
-    const celestialX = width * 0.72;
-    const celestialY = height * 0.32;
-    const celestialR = 48;
-
-    const glow = ctx.createRadialGradient(celestialX, celestialY, celestialR * 0.5, celestialX, celestialY, celestialR * 2.5);
-    glow.addColorStop(0, sunGlow);
-    glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(celestialX, celestialY, celestialR * 2.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = sunColor;
-    ctx.beginPath();
-    ctx.arc(celestialX, celestialY, celestialR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 4. Stylized Japanese Clouds
-    const drawCloud = (cx: number, cy: number, w: number, h: number, alpha: number) => {
+    // 3. SUN / MOON
+    const celestialX = width * 0.74;
+    const celestialY = height * 0.22;
+    if (isNight && assets.bgMoonCrescent) {
+      const moonW = 75;
+      const moonH = 75;
       ctx.save();
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.beginPath();
-      ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(cx - w * 0.2, cy - h * 0.25, h * 0.65, 0, Math.PI * 2);
-      ctx.arc(cx + w * 0.15, cy - h * 0.15, h * 0.55, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.filter = 'drop-shadow(0 0 16px rgba(254, 240, 138, 0.5))';
+      ctx.drawImage(assets.bgMoonCrescent, celestialX - moonW / 2, celestialY - moonH / 2, moonW, moonH);
       ctx.restore();
-    };
+    } else if (theme === 'sunset' && assets.bgSunSunset) {
+      const sunSize = 92;
+      drawSprite(ctx, assets.bgSunSunset, 4, 4, 0, 0, celestialX - sunSize / 2, celestialY - sunSize / 2, sunSize, sunSize);
+    } else {
+      const glow = ctx.createRadialGradient(celestialX, celestialY, 15, celestialX, celestialY, 65);
+      glow.addColorStop(0, sunGlow);
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(celestialX, celestialY, 65, 0, Math.PI * 2);
+      ctx.fill();
 
-    drawCloud(width * 0.35, height * 0.28, 160, 32, 0.45);
-    drawCloud(width * 0.85, height * 0.22, 140, 28, 0.35);
+      ctx.fillStyle = sunColor;
+      ctx.beginPath();
+      ctx.arc(celestialX, celestialY, 30, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-    // 5. Mount Fuji
-    const fujiBaseY = height * 0.68;
-    const fujiPeakX = width * 0.28;
-    const fujiPeakY = height * 0.22;
-    const fujiHalfW = 240;
+    // 4. FLUFFY CLOUDS (Real asset bgCloud)
+    if (assets.bgCloud) {
+      const cloudPositions = [
+        { x: width * 0.10, y: height * 0.08, w: 120, h: 120, alpha: isNight ? 0.35 : 0.8 },
+        { x: width * 0.50, y: height * 0.12, w: 105, h: 105, alpha: isNight ? 0.30 : 0.7 },
+        { x: width * 0.82, y: height * 0.06, w: 130, h: 130, alpha: isNight ? 0.40 : 0.85 },
+      ];
+      for (const c of cloudPositions) {
+        ctx.save();
+        ctx.globalAlpha = c.alpha;
+        ctx.drawImage(assets.bgCloud, c.x, c.y, c.w, c.h);
+        ctx.restore();
+      }
+    }
 
-    const fujiGrad = ctx.createLinearGradient(0, fujiPeakY, 0, fujiBaseY);
-    fujiGrad.addColorStop(0, '#3E4968');
-    fujiGrad.addColorStop(0.5, '#4F5D7E');
-    fujiGrad.addColorStop(1, '#6A7B9B');
-    ctx.fillStyle = fujiGrad;
-    ctx.beginPath();
-    ctx.moveTo(fujiPeakX - 32, fujiPeakY + 8);
-    ctx.quadraticCurveTo(fujiPeakX - 90, fujiBaseY * 0.75, fujiPeakX - fujiHalfW, fujiBaseY);
-    ctx.lineTo(fujiPeakX + fujiHalfW, fujiBaseY);
-    ctx.quadraticCurveTo(fujiPeakX + 90, fujiBaseY * 0.75, fujiPeakX + 32, fujiPeakY + 8);
-    ctx.closePath();
-    ctx.fill();
+    // 5. DISTANT SKY LANDMARK (Mount Fuji / Pagoda / Tokyo Tower)
+    const landmarkBaseY = height * 0.68;
+    const skyLandmarkX = width * 0.40;
 
-    // Snow Cap on Fuji
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.moveTo(fujiPeakX - 32, fujiPeakY + 8);
-    ctx.lineTo(fujiPeakX + 32, fujiPeakY + 8);
-    ctx.quadraticCurveTo(fujiPeakX + 60, fujiPeakY + 75, fujiPeakX + 80, fujiPeakY + 110);
-    ctx.lineTo(fujiPeakX + 50, fujiPeakY + 95);
-    ctx.lineTo(fujiPeakX + 25, fujiPeakY + 120);
-    ctx.lineTo(fujiPeakX, fujiPeakY + 100);
-    ctx.lineTo(fujiPeakX - 25, fujiPeakY + 125);
-    ctx.lineTo(fujiPeakX - 50, fujiPeakY + 105);
-    ctx.lineTo(fujiPeakX - 80, fujiPeakY + 115);
-    ctx.quadraticCurveTo(fujiPeakX - 60, fujiPeakY + 75, fujiPeakX - 32, fujiPeakY + 8);
-    ctx.closePath();
-    ctx.fill();
+    if (stageId === 'kyoto' && assets.bgKyotoPagoda) {
+      const pW = 320;
+      const pH = 334;
+      const pX = skyLandmarkX - pW / 2;
+      const pY = landmarkBaseY - pH * 0.88;
+      ctx.save();
+      if (isNight) ctx.filter = 'brightness(0.70) saturate(0.85)';
+      ctx.drawImage(assets.bgKyotoPagoda, pX, pY, pW, pH);
+      ctx.restore();
+    } else if (stageId === 'tokyo' && assets.bgTokyoTower) {
+      const tW = 190;
+      const tH = 375;
+      const tX = skyLandmarkX - tW / 2;
+      const tY = landmarkBaseY - tH * 0.94;
+      ctx.save();
+      const halo = ctx.createRadialGradient(tX + tW / 2, tY + tH * 0.35, 10, tX + tW / 2, tY + tH * 0.35, 110);
+      halo.addColorStop(0, 'rgba(255, 160, 60, 0.35)');
+      halo.addColorStop(1, 'rgba(255, 120, 30, 0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(tX + tW / 2, tY + tH * 0.35, 110, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(assets.bgTokyoTower, tX, tY, tW, tH);
+      ctx.restore();
+    } else if (assets.bgFuji) {
+      // Signature Mount Fuji
+      const fujiW = 440;
+      const fujiH = 440;
+      const fujiX = skyLandmarkX - fujiW / 2;
+      const fujiY = landmarkBaseY - fujiH * 0.90;
+      ctx.save();
+      if (isNight) {
+        ctx.filter = 'brightness(0.70) saturate(0.85) hue-rotate(-10deg)';
+      } else if (theme === 'sunset') {
+        ctx.filter = 'brightness(0.95) saturate(1.15) hue-rotate(-8deg)';
+      }
+      ctx.drawImage(assets.bgFuji, fujiX, fujiY, fujiW, fujiH);
 
-    // 6. Rolling Green Hills (Midground)
-    const hillGrad = ctx.createLinearGradient(0, height * 0.58, 0, height * 0.75);
-    hillGrad.addColorStop(0, '#52796F');
-    hillGrad.addColorStop(1, '#3B5950');
-    ctx.fillStyle = hillGrad;
-    ctx.beginPath();
-    ctx.moveTo(0, height * 0.62);
-    ctx.bezierCurveTo(width * 0.3, height * 0.58, width * 0.6, height * 0.68, width, height * 0.63);
-    ctx.lineTo(width, height * 0.78);
-    ctx.lineTo(0, height * 0.78);
-    ctx.closePath();
-    ctx.fill();
+      // Diamond sparkle on snowy peak
+      const sX = fujiX + fujiW * 0.48;
+      const sY = fujiY + fujiH * 0.22;
+      ctx.fillStyle = isNight ? 'rgba(210, 235, 255, 0.9)' : 'rgba(255, 255, 255, 0.95)';
+      ctx.beginPath();
+      ctx.arc(sX, sY, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = isNight ? 'rgba(210, 235, 255, 0.8)' : 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(sX - 8, sY); ctx.lineTo(sX + 8, sY);
+      ctx.moveTo(sX, sY - 8); ctx.lineTo(sX, sY + 8);
+      ctx.stroke();
+      ctx.restore();
+    }
 
-    // 7. Ground / Road Perspective
+    // 6. DISTANT MOUNTAIN RIDGE (Seamless strip)
+    const mountainY = height * 0.58;
+    const mountainImg = stageId === 'hokkaido'
+      ? (assets.bgHokkaidoSnow || assets.bgMountains)
+      : assets.bgMountains;
+
+    if (mountainImg) {
+      const mW = 960;
+      const mH = 240;
+      ctx.save();
+      if (isNight) ctx.filter = 'brightness(0.68) saturate(0.85)';
+      else if (theme === 'sunset') ctx.filter = 'brightness(0.92) saturate(1.12)';
+      ctx.drawImage(mountainImg, 0, mountainY - 135, mW, mH);
+      ctx.restore();
+    }
+
+    // 7. MID-GROUND ROLLING HILLS (Seamless strip)
+    const midHillY = height * 0.67;
+    const hillImg = stageId === 'tokyo'
+      ? (assets.bgTokyoSkyline || assets.bgHills)
+      : stageId === 'kyoto'
+      ? (assets.bgKyotoBamboo || assets.bgHills)
+      : stageId === 'hokkaido'
+      ? (assets.bgHokkaidoLavender || assets.bgHills)
+      : assets.bgHills;
+
+    if (hillImg) {
+      const hW = 960;
+      const hH = 240;
+      ctx.save();
+      if (isNight) ctx.filter = 'brightness(0.60) saturate(0.85)';
+      else if (theme === 'sunset') ctx.filter = 'brightness(0.92) saturate(1.12)';
+      ctx.drawImage(hillImg, 0, midHillY - 105, hW, hH);
+      ctx.restore();
+    }
+
+    // 8. ROADWAY SURFACE & CURB
     const roadTopY = height * 0.72;
     const roadBottomY = height;
-    ctx.fillStyle = '#7A6B61';
+    const incline = Math.min(15, (rec.max_incline || 0));
+    const inclineOffset = incline * 1.5;
+
+    // Road Asphalt
+    ctx.fillStyle = isNight ? '#3D3833' : '#5E564E';
     ctx.beginPath();
     ctx.moveTo(0, roadTopY);
-    ctx.lineTo(width, roadTopY + 18);
+    ctx.lineTo(width, roadTopY - inclineOffset);
     ctx.lineTo(width, roadBottomY);
     ctx.lineTo(0, roadBottomY);
     ctx.closePath();
     ctx.fill();
 
-    // Road curb
-    ctx.fillStyle = '#5A4E46';
-    ctx.fillRect(0, roadTopY, width, 6);
-
-    // Road dashed lines
-    ctx.strokeStyle = 'rgba(245, 238, 230, 0.85)';
-    ctx.lineWidth = 4;
-    ctx.setLineDash([28, 22]);
+    // Curb Strip
+    ctx.fillStyle = isNight ? '#2B2622' : '#453E38';
     ctx.beginPath();
-    ctx.moveTo(0, roadTopY + (roadBottomY - roadTopY) * 0.55);
-    ctx.lineTo(width, roadTopY + (roadBottomY - roadTopY) * 0.55 + 10);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 8. Stone Lantern (Toro) on Roadside
-    const toroX = width * 0.82;
-    const toroY = roadTopY - 20;
-    ctx.fillStyle = '#524A44';
-    ctx.fillRect(toroX - 10, toroY + 20, 20, 30);
-    ctx.fillRect(toroX - 15, toroY + 10, 30, 10);
-    ctx.fillStyle = '#FFAA33';
-    ctx.fillRect(toroX - 8, toroY - 5, 16, 15);
-    ctx.fillStyle = '#3E3631';
-    ctx.beginPath();
-    ctx.moveTo(toroX - 22, toroY - 5);
-    ctx.lineTo(toroX + 22, toroY - 5);
-    ctx.lineTo(toroX, toroY - 25);
+    ctx.moveTo(0, roadTopY);
+    ctx.lineTo(width, roadTopY - inclineOffset);
+    ctx.lineTo(width, roadTopY - inclineOffset + 6);
+    ctx.lineTo(0, roadTopY + 6);
     ctx.closePath();
     ctx.fill();
 
-    // 9. Runner Silhouette with Ponytail
-    const runnerX = width * 0.42;
-    const runnerY = roadTopY + 45;
+    // Dashed Center Lane Line
+    ctx.strokeStyle = 'rgba(245, 238, 230, 0.85)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([26, 20]);
+    ctx.beginPath();
+    const laneYStart = roadTopY + (roadBottomY - roadTopY) * 0.52;
+    const laneYEnd = (roadTopY - inclineOffset) + (roadBottomY - (roadTopY - inclineOffset)) * 0.52;
+    ctx.moveTo(0, laneYStart);
+    ctx.lineTo(width, laneYEnd);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
+    // 9. ROADSIDE PROPS
+    // Milestone Post
+    if (assets.propMilestone) {
+      const mileX = width * 0.16;
+      const mileY = roadTopY - 18;
+      const mileW = 46;
+      const mileH = 72;
+
+      ctx.fillStyle = 'rgba(20, 15, 10, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(mileX + mileW / 2, mileY + mileH - 2, 16, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.drawImage(assets.propMilestone, mileX, mileY, mileW, mileH);
+
+      ctx.fillStyle = '#4A3B32';
+      ctx.font = 'bold 11px ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${(rec.distance_meters / 1000).toFixed(1)}km`, mileX + mileW / 2, mileY + 36);
+    }
+
+    // Stone Lantern (Toro)
+    if (assets.encounterLantern) {
+      const toroX = width * 0.82;
+      const toroY = roadTopY - 26;
+      const toroW = 54;
+      const toroH = 78;
+
+      ctx.fillStyle = 'rgba(20, 15, 10, 0.3)';
+      ctx.beginPath();
+      ctx.ellipse(toroX + toroW / 2, toroY + toroH - 4, 18, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.drawImage(assets.encounterLantern, toroX, toroY, toroW, toroH);
+
+      if (isNight) {
+        const lanternGlow = ctx.createRadialGradient(toroX + toroW / 2, toroY + 28, 4, toroX + toroW / 2, toroY + 28, 35);
+        lanternGlow.addColorStop(0, 'rgba(255, 180, 60, 0.45)');
+        lanternGlow.addColorStop(1, 'rgba(255, 180, 60, 0)');
+        ctx.fillStyle = lanternGlow;
+        ctx.beginPath();
+        ctx.arc(toroX + toroW / 2, toroY + 28, 35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 10. RUNNER (Pixel Art Sprite from PixelLab)
+    const runnerX = width * 0.46;
+    const runnerRoadY = roadTopY + 48;
+    const runnerSpriteW = 86;
+    const runnerSpriteH = 86;
+    const runnerGroundDy = -runnerSpriteH * (60 / 64);
+
+    // Runner Drop Shadow
     ctx.save();
-    ctx.translate(runnerX, runnerY);
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.translate(runnerX, runnerRoadY);
+    ctx.fillStyle = 'rgba(30, 20, 15, 0.28)';
     ctx.beginPath();
-    ctx.ellipse(0, 5, 22, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 4, 22, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.fillStyle = '#2C2621';
-    ctx.beginPath();
-    ctx.roundRect(-8, -48, 16, 26, 6);
-    ctx.fill();
-
-    ctx.fillStyle = '#F4D06F';
-    ctx.beginPath();
-    ctx.arc(0, -56, 10, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#8B5A2B';
-    ctx.beginPath();
-    ctx.arc(0, -58, 11, Math.PI * 0.8, Math.PI * 2.2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-6, -60);
-    ctx.quadraticCurveTo(-22, -62, -18, -48);
-    ctx.quadraticCurveTo(-10, -52, -6, -55);
-    ctx.fill();
-
-    ctx.strokeStyle = '#2C2621';
-    ctx.lineWidth = 4.5;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(2, -24);
-    ctx.lineTo(14, -8);
-    ctx.lineTo(10, 5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-4, -24);
-    ctx.lineTo(-16, -12);
-    ctx.lineTo(-24, -2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(0, -42);
-    ctx.lineTo(12, -34);
-    ctx.lineTo(18, -44);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(0, -42);
-    ctx.lineTo(-12, -34);
-    ctx.lineTo(-8, -26);
-    ctx.stroke();
-
     ctx.restore();
 
-    // 10. Companion Dog (Shiba) Running Beside
-    const shibaX = runnerX - 48;
-    const shibaY = runnerY + 8;
+    // Draw Runner Sprite (Frame 1: dynamic running stride)
+    if (assets.runnerRun) {
+      ctx.save();
+      ctx.translate(runnerX, runnerRoadY);
+      ctx.rotate(0.06);
+      drawSprite(ctx, assets.runnerRun, 4, 4, 1, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
+      ctx.restore();
+    }
 
+    // 11. PET SHIBA COMPANION (Pixel Art Sprite)
+    const petX = runnerX - 48;
+    const petRoadY = runnerRoadY - 4;
+    const petDrawSize = 44;
+    const petGroundDy = -petDrawSize * (27 / 32);
+
+    // Pet Drop Shadow
     ctx.save();
-    ctx.translate(shibaX, shibaY);
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.translate(petX, petRoadY);
+    ctx.fillStyle = 'rgba(30, 20, 15, 0.24)';
     ctx.beginPath();
-    ctx.ellipse(0, 4, 15, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 3, 14, 4, 0, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.fillStyle = '#D97706';
-    ctx.beginPath();
-    ctx.ellipse(0, -12, 14, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(12, -18, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(9, -24);
-    ctx.lineTo(13, -28);
-    ctx.lineTo(15, -23);
-    ctx.fill();
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(15, -16, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#D97706';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(-13, -19, 5, 0, Math.PI * 1.5);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#D97706';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(6, -6);
-    ctx.lineTo(11, 2);
-    ctx.moveTo(-6, -6);
-    ctx.lineTo(-12, 1);
-    ctx.stroke();
-
     ctx.restore();
 
-    // 11. Drifting Sakura Petals
-    ctx.fillStyle = 'rgba(255, 182, 193, 0.85)';
-    for (let p = 0; p < 18; p++) {
-      const px = (Math.sin(p * 47) * 0.5 + 0.5) * width;
-      const py = (Math.cos(p * 83) * 0.5 + 0.5) * (height * 0.85);
+    // Draw Shiba Sprite (Frame 1: playful trot)
+    if (assets.petShiba) {
+      ctx.save();
+      ctx.translate(petX, petRoadY);
+      drawSprite(ctx, assets.petShiba, 4, 4, 1, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+      ctx.restore();
+    }
+
+    // 12. FALLING SAKURA / AUTUMN PETALS
+    const petalCount = 14;
+    const petalColor = theme === 'sunset' ? 'rgba(235, 120, 70, 0.75)' : 'rgba(255, 185, 205, 0.8)';
+    ctx.fillStyle = petalColor;
+    for (let i = 0; i < petalCount; i++) {
+      const px = ((i * 73) % width);
+      const py = height * 0.45 + ((i * 47) % (height * 0.5));
       ctx.save();
       ctx.translate(px, py);
-      ctx.rotate(p * 0.4);
+      ctx.rotate(0.3 + (i % 5) * 0.2);
       ctx.beginPath();
-      ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -859,7 +1064,7 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               format === 'story'
                 ? 'bg-[#52796F] text-white shadow-cozy-sm'
-                : 'text-[#6B635B] hover:text-[#2C2621]'
+                : 'text-[#6C635B] hover:text-[#2C2621]'
             }`}
           >
             <Smartphone className="w-3.5 h-3.5" />
@@ -871,7 +1076,7 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               format === 'landscape'
                 ? 'bg-[#52796F] text-white shadow-cozy-sm'
-                : 'text-[#6B635B] hover:text-[#2C2621]'
+                : 'text-[#6C635B] hover:text-[#2C2621]'
             }`}
           >
             <ImageIcon className="w-3.5 h-3.5" />
@@ -888,7 +1093,10 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
               className="max-h-[48vh] w-auto max-w-full object-contain rounded-xl block select-auto pointer-events-auto shadow-md"
             />
           ) : (
-            <div className="py-20 text-[#8C827A] text-xs font-mono animate-pulse">กำลังประมวลผลรูปภาพ...</div>
+            <div className="py-20 text-[#8C827A] text-xs font-mono animate-pulse flex flex-col items-center gap-2">
+              <span className="text-2xl animate-spin">⏳</span>
+              <span>กำลังดึงภาพฉาก Scenic และจัดทำรูปภาพ...</span>
+            </div>
           )}
         </div>
 
