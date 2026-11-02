@@ -72,6 +72,10 @@ interface ScenicAssets {
   bgKyotoPagoda: HTMLImageElement | null;
   bgHokkaidoSnow: HTMLImageElement | null;
   bgHokkaidoLavender: HTMLImageElement | null;
+  landmarkHokkaidoBarn: HTMLImageElement | null;
+  encounterHokkaidoCow: HTMLImageElement | null;
+  landmarkKyotoGate: HTMLImageElement | null;
+  landmarkTokyoYatai: HTMLImageElement | null;
   bgTokyoTower: HTMLImageElement | null;
   bgTokyoSkyline: HTMLImageElement | null;
 }
@@ -92,26 +96,31 @@ function getOrLoadScenicAssets(): Promise<ScenicAssets> {
     });
   };
 
+  const v = '?v=20261102b';
   assetLoadingPromise = Promise.all([
-    loadImg('/assets/scenic/runner-female-run.png'),
-    loadImg('/assets/scenic/runner-female-idle.png'),
-    loadImg('/assets/scenic/bg-cloud.png'),
-    loadImg('/assets/scenic/bg-mountain-fuji.png'),
-    loadImg('/assets/scenic/bg-mountains-distant.png'),
-    loadImg('/assets/scenic/bg-hills-green.png'),
-    loadImg('/assets/scenic/bg-sun-sunset.png'),
-    loadImg('/assets/scenic/bg-moon-crescent.png'),
-    loadImg('/assets/scenic/pet-shiba-run.png'),
-    loadImg('/assets/scenic/prop-milestone-post.png'),
-    loadImg('/assets/scenic/encounter-lantern.png'),
-    loadImg('/assets/scenic/landmark-torii-gate.png'),
-    loadImg('/assets/scenic/landmark-sakura-tree.png'),
-    loadImg('/assets/scenic/bg-hills-kyoto-bamboo.png'),
-    loadImg('/assets/scenic/bg-landmark-kyoto-pagoda.png'),
-    loadImg('/assets/scenic/bg-mountains-hokkaido-snow.png'),
-    loadImg('/assets/scenic/bg-hills-hokkaido-lavender.png'),
-    loadImg('/assets/scenic/bg-landmark-tokyo-tower.png'),
-    loadImg('/assets/scenic/bg-skyline-tokyo-retro.png'),
+    loadImg(`/assets/scenic/runner-female-run.png${v}`),
+    loadImg(`/assets/scenic/runner-female-idle.png${v}`),
+    loadImg(`/assets/scenic/bg-cloud.png${v}`),
+    loadImg(`/assets/scenic/bg-mountain-fuji.png${v}`),
+    loadImg(`/assets/scenic/bg-mountains-distant.png${v}`),
+    loadImg(`/assets/scenic/bg-hills-green.png${v}`),
+    loadImg(`/assets/scenic/bg-sun-sunset.png${v}`),
+    loadImg(`/assets/scenic/bg-moon-crescent.png${v}`),
+    loadImg(`/assets/scenic/pet-shiba-run.png${v}`),
+    loadImg(`/assets/scenic/prop-milestone-post.png${v}`),
+    loadImg(`/assets/scenic/encounter-lantern.png${v}`),
+    loadImg(`/assets/scenic/landmark-torii-gate.png${v}`),
+    loadImg(`/assets/scenic/landmark-sakura-tree.png${v}`),
+    loadImg(`/assets/scenic/bg-hills-kyoto-bamboo.png${v}`),
+    loadImg(`/assets/scenic/bg-landmark-kyoto-pagoda.png${v}`),
+    loadImg(`/assets/scenic/bg-mountains-hokkaido-snow.png${v}`),
+    loadImg(`/assets/scenic/bg-hills-hokkaido-lavender.png${v}`),
+    loadImg(`/assets/scenic/landmark-hokkaido-barn-windmill.png${v}`),
+    loadImg(`/assets/scenic/encounter-hokkaido-cow.png${v}`),
+    loadImg(`/assets/scenic/landmark-kyoto-shrine-gate.png${v}`),
+    loadImg(`/assets/scenic/landmark-tokyo-yatai-ramen.png${v}`),
+    loadImg(`/assets/scenic/bg-landmark-tokyo-tower.png${v}`),
+    loadImg(`/assets/scenic/bg-skyline-tokyo-retro.png${v}`),
   ]).then(([
     runnerRun,
     runnerIdle,
@@ -130,6 +139,10 @@ function getOrLoadScenicAssets(): Promise<ScenicAssets> {
     bgKyotoPagoda,
     bgHokkaidoSnow,
     bgHokkaidoLavender,
+    landmarkHokkaidoBarn,
+    encounterHokkaidoCow,
+    landmarkKyotoGate,
+    landmarkTokyoYatai,
     bgTokyoTower,
     bgTokyoSkyline,
   ]) => {
@@ -151,6 +164,10 @@ function getOrLoadScenicAssets(): Promise<ScenicAssets> {
       bgKyotoPagoda,
       bgHokkaidoSnow,
       bgHokkaidoLavender,
+      landmarkHokkaidoBarn,
+      encounterHokkaidoCow,
+      landmarkKyotoGate,
+      landmarkTokyoYatai,
       bgTokyoTower,
       bgTokyoSkyline,
     };
@@ -742,11 +759,11 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     const celestialX = width * 0.74;
     const celestialY = height * 0.22;
     if (isNight && assets.bgMoonCrescent) {
-      const moonW = 75;
-      const moonH = 75;
+      const moonSize = 56;
       ctx.save();
       ctx.filter = 'drop-shadow(0 0 16px rgba(254, 240, 138, 0.5))';
-      ctx.drawImage(assets.bgMoonCrescent, celestialX - moonW / 2, celestialY - moonH / 2, moonW, moonH);
+      // PixelLab moon is an 8x8 sheet of 32x32 cells (cell 0,0 is a single crisp golden crescent moon)
+      drawSprite(ctx, assets.bgMoonCrescent, 8, 8, 0, 0, celestialX - moonSize / 2, celestialY - moonSize / 2, moonSize, moonSize);
       ctx.restore();
     } else if (theme === 'sunset' && assets.bgSunSunset) {
       const sunSize = 92;
@@ -809,8 +826,8 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       ctx.fill();
       ctx.drawImage(assets.bgTokyoTower, tX, tY, tW, tH);
       ctx.restore();
-    } else if (assets.bgFuji) {
-      // Signature Mount Fuji
+    } else if (stageId === 'kamakura' && assets.bgFuji) {
+      // Signature Mount Fuji (Kamakura stage only)
       const fujiW = 440;
       const fujiH = 440;
       const fujiX = skyLandmarkX - fujiW / 2;
@@ -934,27 +951,54 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       ctx.fillText(`${(rec.distance_meters / 1000).toFixed(1)}km`, mileX + mileW / 2, mileY + 36);
     }
 
-    // Stone Lantern (Toro)
-    if (assets.encounterLantern) {
-      const toroX = width * 0.82;
-      const toroY = roadTopY - 26;
+    // Roadside Landmark / Encounter according to Stage
+    const propX = width * 0.82;
+    const propY = roadTopY - 26;
+
+    if (stageId === 'hokkaido' && assets.encounterHokkaidoCow) {
+      // Cute Hokkaido Dairy Cow
+      const cowW = 76;
+      const cowH = 76;
+      ctx.fillStyle = 'rgba(20, 15, 10, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(propX + cowW / 2, roadTopY + 4, 24, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(assets.encounterHokkaidoCow, propX, roadTopY - cowH + 8, cowW, cowH);
+    } else if (stageId === 'kyoto' && assets.landmarkKyotoGate) {
+      // Kyoto Shrine Torii Gate
+      const gateW = 78;
+      const gateH = 78;
+      ctx.fillStyle = 'rgba(20, 15, 10, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(propX + gateW / 2, roadTopY + 4, 26, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(assets.landmarkKyotoGate, propX, roadTopY - gateH + 8, gateW, gateH);
+    } else if (stageId === 'tokyo' && assets.landmarkTokyoYatai) {
+      // Tokyo Yatai Ramen Stall
+      const yataiW = 84;
+      const yataiH = 84;
+      ctx.fillStyle = 'rgba(20, 15, 10, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(propX + yataiW / 2, roadTopY + 4, 28, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(assets.landmarkTokyoYatai, propX, roadTopY - yataiH + 8, yataiW, yataiH);
+    } else if (assets.encounterLantern) {
+      // Traditional Stone Lantern (Kamakura)
       const toroW = 54;
       const toroH = 78;
-
       ctx.fillStyle = 'rgba(20, 15, 10, 0.3)';
       ctx.beginPath();
-      ctx.ellipse(toroX + toroW / 2, toroY + toroH - 4, 18, 5, 0, 0, Math.PI * 2);
+      ctx.ellipse(propX + toroW / 2, propY + toroH - 4, 18, 5, 0, 0, Math.PI * 2);
       ctx.fill();
-
-      ctx.drawImage(assets.encounterLantern, toroX, toroY, toroW, toroH);
+      ctx.drawImage(assets.encounterLantern, propX, propY, toroW, toroH);
 
       if (isNight) {
-        const lanternGlow = ctx.createRadialGradient(toroX + toroW / 2, toroY + 28, 4, toroX + toroW / 2, toroY + 28, 35);
+        const lanternGlow = ctx.createRadialGradient(propX + toroW / 2, propY + 28, 4, propX + toroW / 2, propY + 28, 35);
         lanternGlow.addColorStop(0, 'rgba(255, 180, 60, 0.45)');
         lanternGlow.addColorStop(1, 'rgba(255, 180, 60, 0)');
         ctx.fillStyle = lanternGlow;
         ctx.beginPath();
-        ctx.arc(toroX + toroW / 2, toroY + 28, 35, 0, Math.PI * 2);
+        ctx.arc(propX + toroW / 2, propY + 28, 35, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -999,11 +1043,11 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     ctx.fill();
     ctx.restore();
 
-    // Draw Shiba Sprite (Frame 1: playful trot)
+    // Draw Shiba Sprite (Frame 1: playful trot - 8x8 PixelLab sheet)
     if (assets.petShiba) {
       ctx.save();
       ctx.translate(petX, petRoadY);
-      drawSprite(ctx, assets.petShiba, 4, 4, 1, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+      drawSprite(ctx, assets.petShiba, 8, 8, 1, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
       ctx.restore();
     }
 
