@@ -8,7 +8,6 @@ neonConfig.disableWarningInBrowsers = true;
 
 const LOCAL_STORAGE_KEY = 'treadmill_workouts_backup';
 const NEON_URL_KEY = 'neon_database_url';
-const DEFAULT_NEON_URL = '';
 
 class NeonDatabaseService {
   private customUrl: string = '';
@@ -18,7 +17,7 @@ class NeonDatabaseService {
       this.customUrl = 
         localStorage.getItem(NEON_URL_KEY) || 
         (import.meta as any).env?.VITE_NEON_DATABASE_URL || 
-        DEFAULT_NEON_URL;
+        '';
     }
   }
 
