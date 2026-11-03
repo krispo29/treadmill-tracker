@@ -87,6 +87,11 @@ export const App: React.FC = () => {
   const autoSaveDebounceRef = useRef<boolean>(false);
   const isSavingRef = useRef<boolean>(false);
   const hasSavedCurrentSessionRef = useRef<boolean>(false);
+  const lastSavedWorkoutRef = useRef<{ timestamp: number; distance: number; duration: number }>({
+    timestamp: 0,
+    distance: 0,
+    duration: 0,
+  });
 
   // Multi-Profile Management (100% Neon Database Driven with LocalStorage Cache)
   const [profiles, setProfiles] = useState<UserProfile[]>(() => {
@@ -203,8 +208,11 @@ export const App: React.FC = () => {
         // Auto-detect when belt stops running (Phase 3)
         if (newMetrics.speedKmh > 0.5) {
           wasRunningRef.current = true;
-          autoSaveDebounceRef.current = false;
-          hasSavedCurrentSessionRef.current = false;
+          // Only reset saved status if starting a fresh session from zero
+          if (newMetrics.elapsedSeconds <= 3) {
+            hasSavedCurrentSessionRef.current = false;
+            autoSaveDebounceRef.current = false;
+          }
         } else if (newMetrics.speedKmh <= 0.05 && wasRunningRef.current) {
           wasRunningRef.current = false;
           if (!hasSavedCurrentSessionRef.current && !autoSaveDebounceRef.current && (newMetrics.elapsedSeconds >= 15 || newMetrics.distanceMeters >= 30)) {
@@ -334,6 +342,7 @@ export const App: React.FC = () => {
     autoSaveDebounceRef.current = false;
     isSavingRef.current = false;
     hasSavedCurrentSessionRef.current = false;
+    lastSavedWorkoutRef.current = { timestamp: 0, distance: 0, duration: 0 };
     if (workoutState.program) {
       setWorkoutState((prev) => ({ ...prev, program: null, currentStepIndex: 0, stepElapsedSeconds: 0 }));
     }
@@ -405,20 +414,29 @@ export const App: React.FC = () => {
   };
 
   const handleStartTreadmill = (spd: number = 3.0) => {
+    // If previous workout session was already saved, automatically reset for fresh run
+    if (hasSavedCurrentSessionRef.current) {
+      resetAfterWorkout();
+    }
     bluetoothService.startTreadmill(spd);
     setIsGiantHudOpen(true);
   };
 
   const handleStopTreadmill = async () => {
     await bluetoothService.stopTreadmill();
-    // Auto-save session immediately when stopping belt (if not already saved)
-    if (!hasSavedCurrentSessionRef.current && (metrics.elapsedSeconds >= 10 || metrics.distanceMeters >= 20)) {
+    // Auto-save immediately if already stopped (e.g. simulation or belt already halted).
+    // If belt is still decelerating (speed > 0.1), let the telemetry callback (speed <= 0.05)
+    // auto-save once the belt comes to a complete rest with full distance and time.
+    if (metrics.speedKmh <= 0.1 && !hasSavedCurrentSessionRef.current && (metrics.elapsedSeconds >= 10 || metrics.distanceMeters >= 20)) {
       await saveSessionRecord('วิ่งจบเซสชั่น (Auto-saved)');
     }
   };
 
   // Workout Program controls
   const handleStartProgram = (prog: WorkoutProgram) => {
+    if (hasSavedCurrentSessionRef.current) {
+      resetAfterWorkout();
+    }
     setWorkoutState({
       program: prog,
       currentStepIndex: 0,
@@ -476,6 +494,17 @@ export const App: React.FC = () => {
     if (isSavingRef.current) return;
     if (!isManual && hasSavedCurrentSessionRef.current) return;
 
+    // Deduplication cooldown: reject saving identical workout metrics within 30 seconds
+    const now = Date.now();
+    const timeDiff = now - lastSavedWorkoutRef.current.timestamp;
+    const distDiff = Math.abs(metrics.distanceMeters - lastSavedWorkoutRef.current.distance);
+    const durDiff = Math.abs(metrics.elapsedSeconds - lastSavedWorkoutRef.current.duration);
+
+    if (timeDiff < 30000 && distDiff < 100 && durDiff < 30) {
+      console.warn('Duplicate workout save prevented:', { timeDiff, distDiff, durDiff });
+      return;
+    }
+
     if (metrics.elapsedSeconds < 10 && metrics.distanceMeters < 20) {
       if (isManual) {
         alert('เวลาในการวิ่งสั้นเกินไป (ต้องมากกว่า 10 วินาที)');
@@ -486,6 +515,11 @@ export const App: React.FC = () => {
     isSavingRef.current = true;
     hasSavedCurrentSessionRef.current = true;
     autoSaveDebounceRef.current = true;
+    lastSavedWorkoutRef.current = {
+      timestamp: now,
+      distance: metrics.distanceMeters,
+      duration: metrics.elapsedSeconds,
+    };
     setIsSaving(true);
 
     try {

@@ -11,7 +11,9 @@ import {
   Calendar,
   RefreshCw,
   Users,
-  Camera
+  Camera,
+  ChevronDown,
+  UserCheck
 } from 'lucide-react';
 import type { WorkoutRecord, DatabaseStats } from '../types/database';
 import type { UserProfile } from '../types/treadmill';
@@ -34,12 +36,27 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [selectedPostcardRecord, setSelectedPostcardRecord] = useState<WorkoutRecord | null>(null);
+  const [editingRunnerWorkoutId, setEditingRunnerWorkoutId] = useState<string | null>(null);
+  const [isUpdatingRunner, setIsUpdatingRunner] = useState(false);
+  const [updateSuccessMsg, setUpdateSuccessMsg] = useState<string | null>(null);
 
   const loadWorkouts = async () => {
     setLoading(true);
     const data = await neonDatabase.getWorkouts();
     setWorkouts(data);
     setLoading(false);
+  };
+
+  const handleUpdateRunner = async (workoutId: string, newProfile: UserProfile) => {
+    setIsUpdatingRunner(true);
+    const updated = await neonDatabase.updateWorkoutRunner(workoutId, newProfile, true);
+    if (updated) {
+      setWorkouts((prev) => prev.map((item) => (item.id === workoutId ? updated : item)));
+      setUpdateSuccessMsg(`เปลี่ยนคนวิ่งเป็น ${newProfile.name} และคำนวณแคลอรี่ใหม่เรียบร้อยแล้ว!`);
+      setTimeout(() => setUpdateSuccessMsg(null), 4000);
+    }
+    setIsUpdatingRunner(false);
+    setEditingRunnerWorkoutId(null);
   };
 
   useEffect(() => {
@@ -133,6 +150,14 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Success Alert */}
+        {updateSuccessMsg && (
+          <div className="mt-3 px-4 py-2 rounded-2xl bg-[#EAF2EC] border border-[#52796F]/30 text-[#3B664E] text-xs font-medium flex items-center gap-2 animate-in fade-in duration-200">
+            <UserCheck className="w-4 h-4 text-[#52796F] shrink-0" />
+            <span>{updateSuccessMsg}</span>
+          </div>
+        )}
 
         {/* Multi-Profile Filter Tabs */}
         <div className="flex items-center gap-1.5 my-3.5 overflow-x-auto pb-1 shrink-0 text-xs">
@@ -228,11 +253,59 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
                 {/* Left: Runner Badge + Program & Date */}
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Runner Avatar Badge */}
-                    <span className="px-2.5 py-0.5 rounded-full font-bold text-xs bg-[#FAF7F2] text-[#2C2621] border border-[#EDE6DC] flex items-center gap-1">
-                      <span>{w.user_avatar || '🏃‍♀️'}</span>
-                      <span>{w.user_name || 'User'}</span>
-                    </span>
+                    {/* Runner Avatar Badge with interactive switcher */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setEditingRunnerWorkoutId(editingRunnerWorkoutId === w.id ? null : w.id)}
+                        className="px-2.5 py-0.5 rounded-full font-bold text-xs bg-[#FAF7F2] text-[#2C2621] border border-[#EDE6DC] hover:border-[#52796F] hover:bg-[#F3EFE6] flex items-center gap-1.5 transition-all cursor-pointer shadow-cozy-xs group"
+                        title="คลิกเพื่อเปลี่ยนคนวิ่งของรอบนี้"
+                      >
+                        <span>{w.user_avatar || '🏃‍♀️'}</span>
+                        <span>{w.user_name || 'User'}</span>
+                        <ChevronDown className={`w-3 h-3 text-[#8C827A] group-hover:text-[#52796F] transition-transform ${editingRunnerWorkoutId === w.id ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Dropdown Menu to change runner */}
+                      {editingRunnerWorkoutId === w.id && (
+                        <div className="absolute left-0 top-full mt-1.5 z-40 bg-white border border-[#EDE6DC] rounded-2xl shadow-cozy-lg p-2 min-w-[210px] text-xs">
+                          <div className="px-2 py-1 font-bold text-[#8C827A] text-[10px] uppercase border-b border-[#EDE6DC]/60 mb-1">
+                            เลือกคนวิ่งของรอบนี้
+                          </div>
+                          <div className="space-y-1">
+                            {profiles.map((p) => {
+                              const isCurrent = (w.user_id === p.id) || (w.user_name?.toLowerCase() === p.name.toLowerCase());
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  disabled={isCurrent || isUpdatingRunner}
+                                  onClick={() => handleUpdateRunner(w.id, p)}
+                                  className={`w-full px-2.5 py-1.5 rounded-xl flex items-center justify-between text-left transition-colors cursor-pointer ${
+                                    isCurrent
+                                      ? 'bg-[#EAF2EC] text-[#52796F] font-bold cursor-default'
+                                      : 'hover:bg-[#FAF7F2] text-[#2C2621]'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{p.avatar || '🏃‍♂️'}</span>
+                                    <span>{p.name} ({p.weightKg}kg)</span>
+                                  </div>
+                                  {isCurrent ? (
+                                    <span className="text-[10px] text-[#52796F] font-medium">ปัจจุบัน</span>
+                                  ) : (
+                                    <span className="text-[10px] text-[#8C827A]">เลือก</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="mt-1.5 pt-1.5 border-t border-[#EDE6DC]/60 text-[10px] text-[#8C827A] px-1 text-center">
+                            * คำนวณแคลอรี่ใหม่ตามน้ำหนักอัตโนมัติ
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     <span className="font-bold text-[#2C2621] text-sm">
                       {w.program_name || 'Free Run'}

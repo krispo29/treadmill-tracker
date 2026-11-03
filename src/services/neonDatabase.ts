@@ -2,6 +2,7 @@ import { neon, neonConfig } from '@neondatabase/serverless';
 import type { WorkoutRecord, DatabaseStats } from '../types/database';
 import type { UserProfile, WorkoutGoal } from '../types/treadmill';
 import type { WorkoutProgram } from '../types/workout';
+import { calculateAcsmCaloriesPerSecond, calculateFatGramsBurned } from './calculations';
 
 // Disable browser warning for personal client app
 neonConfig.disableWarningInBrowsers = true;
@@ -516,6 +517,72 @@ class NeonDatabaseService {
       }
     }
     return true;
+  }
+
+  public async updateWorkoutRunner(
+    id: string,
+    profile: UserProfile,
+    recalculateCalories: boolean = true
+  ): Promise<WorkoutRecord | null> {
+    const workouts = await this.getWorkouts();
+    const workout = workouts.find((w) => w.id === id);
+    if (!workout) return null;
+
+    const newWeight = profile.weightKg;
+    const heightM = profile.heightCm / 100;
+    const newBmi = heightM > 0 ? Number((newWeight / (heightM * heightM)).toFixed(1)) : undefined;
+
+    let newCalories = workout.calories_burned;
+    let newFatGrams = workout.fat_grams_burned;
+
+    if (recalculateCalories && newWeight > 0) {
+      const avgGrade = workout.distance_meters > 0 
+        ? (workout.elevation_gain_meters / workout.distance_meters) * 100 
+        : workout.avg_incline;
+      const calPerSec = calculateAcsmCaloriesPerSecond(workout.avg_speed_kmh, avgGrade, newWeight);
+      newCalories = Number((calPerSec * workout.duration_seconds).toFixed(1));
+      newFatGrams = calculateFatGramsBurned(newCalories, workout.avg_speed_kmh, workout.avg_incline);
+    }
+
+    const updatedWorkout: WorkoutRecord = {
+      ...workout,
+      user_id: profile.id,
+      user_name: profile.name,
+      user_avatar: profile.avatar,
+      user_weight_kg: newWeight,
+      user_height_cm: profile.heightCm,
+      user_age: profile.age,
+      user_gender: profile.gender,
+      user_bmi: newBmi,
+      calories_burned: newCalories,
+      fat_grams_burned: newFatGrams,
+    };
+
+    this.saveToLocal(updatedWorkout);
+
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await sql`
+          UPDATE treadmill_workouts
+          SET user_id = ${updatedWorkout.user_id},
+              user_name = ${updatedWorkout.user_name},
+              user_avatar = ${updatedWorkout.user_avatar},
+              user_weight_kg = ${updatedWorkout.user_weight_kg},
+              user_height_cm = ${updatedWorkout.user_height_cm},
+              user_age = ${updatedWorkout.user_age},
+              user_gender = ${updatedWorkout.user_gender},
+              user_bmi = ${updatedWorkout.user_bmi},
+              calories_burned = ${updatedWorkout.calories_burned},
+              fat_grams_burned = ${updatedWorkout.fat_grams_burned}
+          WHERE id = ${id};
+        `;
+      } catch (err) {
+        console.error('Failed to update workout runner in Neon:', err);
+      }
+    }
+
+    return updatedWorkout;
   }
 
   public calculateStats(workouts: WorkoutRecord[]): DatabaseStats {

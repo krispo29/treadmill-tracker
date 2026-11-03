@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, Smartphone, Image as ImageIcon, Share2, Download } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Smartphone, Image as ImageIcon, Share2, Download, Film, Sparkles, Loader2 } from 'lucide-react';
+import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import type { WorkoutRecord } from '../types/database';
 import { formatDuration, formatPace, getCalorieReward } from '../services/calculations';
 import { ACHIEVEMENT_CATALOG, getUnlockedAchievementIds } from '../services/scenicAchievements';
@@ -29,7 +30,7 @@ export const getThemeForCurrentTime = (date: Date = new Date()): 'sakura' | 'cou
 
 /**
  * Smart Sprite Drawer:
- * Slices out exactly 1 single cell from a sprite sheet grid (e.g. 4x4)
+ * Slices out exactly 1 single cell from a sprite sheet grid (e.g. 4x4 or 8x8)
  */
 function drawSprite(
   ctx: CanvasRenderingContext2D,
@@ -96,7 +97,7 @@ function getOrLoadScenicAssets(): Promise<ScenicAssets> {
     });
   };
 
-  const v = '?v=20261102c';
+  const v = '?v=20261103a';
   assetLoadingPromise = Promise.all([
     loadImg(`/assets/scenic/runner-female-run.png${v}`),
     loadImg(`/assets/scenic/runner-female-idle.png${v}`),
@@ -181,79 +182,374 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
   isOpen,
   onClose,
   record,
-  sourceCanvas,
 }) => {
   const [format, setFormat] = useState<'story' | 'landscape'>('story');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isAssetsLoaded, setIsAssetsLoaded] = useState<boolean>(false);
+  const [isExportingGif, setIsExportingGif] = useState<boolean>(false);
+  const [gifProgress, setGifProgress] = useState<number>(0);
+  const [isExportingVideo, setIsExportingVideo] = useState<boolean>(false);
+  const [videoProgress, setVideoProgress] = useState<number>(0);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+
   const [fileBlob, setFileBlob] = useState<Blob | null>(null);
   const [fileName, setFileName] = useState<string>('');
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animFrameIdRef = useRef<number | null>(null);
+  const scenicCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Preload assets and start live 60fps animation
   useEffect(() => {
     let isCancelled = false;
+
     if (!isOpen || !record) {
-      setPreviewUrl(null);
+      if (animFrameIdRef.current) {
+        cancelAnimationFrame(animFrameIdRef.current);
+        animFrameIdRef.current = null;
+      }
+      setIsAssetsLoaded(false);
       setFileBlob(null);
       return;
     }
-    renderCard(format, () => isCancelled);
+
+    if (!scenicCanvasRef.current) {
+      const sc = document.createElement('canvas');
+      sc.width = 960;
+      sc.height = 720;
+      scenicCanvasRef.current = sc;
+    }
+
+    getOrLoadScenicAssets().then((assets) => {
+      if (isCancelled) return;
+      setIsAssetsLoaded(true);
+
+      // Prepare initial snapshot blob for PNG download / sharing
+      const initialPostCanvas = document.createElement('canvas');
+      const ipctx = initialPostCanvas.getContext('2d');
+      const scenicCanvas = scenicCanvasRef.current!;
+      const sctx = scenicCanvas.getContext('2d');
+
+      if (ipctx && sctx) {
+        drawAuthenticScenicView(sctx, 960, 720, record, assets, 0);
+        if (format === 'story') {
+          drawStoryCard(initialPostCanvas, ipctx, scenicCanvas, record);
+        } else {
+          drawLandscapeCard(initialPostCanvas, ipctx, scenicCanvas, record);
+        }
+
+        const now = new Date(record.created_at || Date.now());
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+        const prefix = format === 'story' ? 'ig-story-running' : 'scenic-postcard';
+        const defaultName = `${prefix}-${fileDate}.png`;
+        setFileName(defaultName);
+
+        initialPostCanvas.toBlob((blob) => {
+          if (blob && !isCancelled) {
+            setFileBlob(blob);
+          }
+        }, 'image/png');
+      }
+
+      // Start continuous animation loop
+      const startTime = performance.now();
+      const loop = (currentTime: number) => {
+        if (isCancelled) return;
+        const animTime = (currentTime - startTime) / 1000;
+
+        const scenic = scenicCanvasRef.current;
+        if (scenic) {
+          const sctx = scenic.getContext('2d');
+          if (sctx) {
+            drawAuthenticScenicView(sctx, 960, 720, record, assets, animTime);
+          }
+        }
+
+        const canvas = canvasRef.current;
+        if (canvas && scenic) {
+          const pctx = canvas.getContext('2d');
+          if (pctx) {
+            if (format === 'story') {
+              drawStoryCard(canvas, pctx, scenic, record);
+            } else {
+              drawLandscapeCard(canvas, pctx, scenic, record);
+            }
+          }
+        }
+
+        animFrameIdRef.current = requestAnimationFrame(loop);
+      };
+
+      animFrameIdRef.current = requestAnimationFrame(loop);
+    });
+
     return () => {
       isCancelled = true;
+      if (animFrameIdRef.current) {
+        cancelAnimationFrame(animFrameIdRef.current);
+        animFrameIdRef.current = null;
+      }
     };
   }, [isOpen, record, format]);
 
   if (!isOpen || !record) return null;
 
-  async function renderCard(currentFormat: 'story' | 'landscape', isCancelled?: () => boolean) {
-    if (!record) return;
+  // Export as Animated GIF using gifenc
+  const handleExportGif = async () => {
+    if (!record || isExportingGif || isExportingVideo) return;
+    setIsExportingGif(true);
+    setGifProgress(0);
+    setExportNotice('กำลังสร้างแอนิเมชั่น GIF วนลูป...');
 
     try {
+      const assets = await getOrLoadScenicAssets();
+      // Use half-res for GIF to keep file size lightweight (<3MB) and fast generation
+      const gifWidth = format === 'story' ? 540 : 600;
+      const gifHeight = format === 'story' ? 960 : 400;
+
+      const gifCanvas = document.createElement('canvas');
+      gifCanvas.width = gifWidth;
+      gifCanvas.height = gifHeight;
+      const gctx = gifCanvas.getContext('2d', { willReadFrequently: true });
+      if (!gctx) throw new Error('Cannot get GIF 2D context');
+
+      const tempScenic = document.createElement('canvas');
+      tempScenic.width = 960;
+      tempScenic.height = 720;
+      const tsctx = tempScenic.getContext('2d');
+      if (!tsctx) throw new Error('Cannot get temp scenic context');
+
+      const fullCardCanvas = document.createElement('canvas');
+      fullCardCanvas.width = format === 'story' ? 1080 : 1200;
+      fullCardCanvas.height = format === 'story' ? 1920 : 800;
+      const fctx = fullCardCanvas.getContext('2d');
+      if (!fctx) throw new Error('Cannot get full card context');
+
+      const gif = GIFEncoder({ auto: true });
+      const totalFrames = 24;
+      const durationSec = 1.6;
+      const delay = Math.round((durationSec / totalFrames) * 1000); // ~67ms per frame (15 fps)
+
+      for (let i = 0; i < totalFrames; i++) {
+        const t = (i / totalFrames) * durationSec;
+        drawAuthenticScenicView(tsctx, 960, 720, record, assets, t);
+
+        if (format === 'story') {
+          drawStoryCard(fullCardCanvas, fctx, tempScenic, record);
+        } else {
+          drawLandscapeCard(fullCardCanvas, fctx, tempScenic, record);
+        }
+
+        // Draw downscaled frame to gifCanvas
+        gctx.clearRect(0, 0, gifWidth, gifHeight);
+        gctx.drawImage(fullCardCanvas, 0, 0, fullCardCanvas.width, fullCardCanvas.height, 0, 0, gifWidth, gifHeight);
+
+        const imgData = gctx.getImageData(0, 0, gifWidth, gifHeight);
+        const palette = quantize(imgData.data, 256);
+        const index = applyPalette(imgData.data, palette);
+        gif.writeFrame(index, gifWidth, gifHeight, { palette, delay });
+
+        setGifProgress(Math.round(((i + 1) / totalFrames) * 100));
+        // Yield execution to allow progress bar rendering
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      gif.finish();
+      const bytes = gif.bytes();
+      const gifBlob = new Blob([bytes as unknown as BlobPart], { type: 'image/gif' });
+
+      const now = new Date(record.created_at || Date.now());
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const prefix = format === 'story' ? 'ig-story-anim' : 'scenic-postcard-anim';
+      const name = `${prefix}-${fileDate}.gif`;
+
+      // Trigger automatic browser download
+      const url = URL.createObjectURL(gifBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      setFileBlob(gifBlob);
+      setFileName(name);
+      setExportNotice('สร้างแอนิเมชั่น GIF สำเร็จ! เริ่มดาวน์โหลดแล้ว');
+      setTimeout(() => setExportNotice(null), 4000);
+    } catch (err) {
+      console.error('GIF export failed:', err);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ GIF');
+    } finally {
+      setIsExportingGif(false);
+      setGifProgress(0);
+    }
+  };
+
+  // Export as Looping Video (MP4 / WebM) for Instagram Stories / Reels
+  const handleExportVideo = async () => {
+    if (!record || isExportingVideo || isExportingGif) return;
+    setIsExportingVideo(true);
+    setVideoProgress(0);
+    setExportNotice('กำลังบันทึกวิดีโอสตอรี่แบบวนลูป...');
+
+    try {
+      const assets = await getOrLoadScenicAssets();
+      const videoCanvas = document.createElement('canvas');
+      const vWidth = format === 'story' ? 1080 : 1200;
+      const vHeight = format === 'story' ? 1920 : 800;
+      videoCanvas.width = vWidth;
+      videoCanvas.height = vHeight;
+      const vctx = videoCanvas.getContext('2d');
+      if (!vctx) throw new Error('Cannot get video 2D context');
+
+      const tempScenic = document.createElement('canvas');
+      tempScenic.width = 960;
+      tempScenic.height = 720;
+      const tsctx = tempScenic.getContext('2d');
+      if (!tsctx) throw new Error('Cannot get temp scenic context');
+
+      // Test best supported mimeType across iOS Safari and Chromium
+      const mimeTypes = [
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+      ];
+      const selectedMime = mimeTypes.find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) || '';
+
+      const stream = videoCanvas.captureStream(30);
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: selectedMime || undefined,
+        videoBitsPerSecond: 6000000, // 6 Mbps high bitrate
+      });
+
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      const durationSec = 3.2; // 3.2 second video loop
+      const fps = 30;
+      const totalFrames = Math.round(durationSec * fps);
+      const frameDurationMs = 1000 / fps;
+
+      // Draw initial frame
+      drawAuthenticScenicView(tsctx, 960, 720, record, assets, 0);
+      if (format === 'story') {
+        drawStoryCard(videoCanvas, vctx, tempScenic, record);
+      } else {
+        drawLandscapeCard(videoCanvas, vctx, tempScenic, record);
+      }
+
+      mediaRecorder.start();
+
+      let currentFrame = 0;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setInterval(() => {
+          currentFrame++;
+          const t = (currentFrame / totalFrames) * durationSec;
+          drawAuthenticScenicView(tsctx, 960, 720, record, assets, t);
+          if (format === 'story') {
+            drawStoryCard(videoCanvas, vctx, tempScenic, record);
+          } else {
+            drawLandscapeCard(videoCanvas, vctx, tempScenic, record);
+          }
+          setVideoProgress(Math.min(99, Math.round((currentFrame / totalFrames) * 100)));
+
+          if (currentFrame >= totalFrames) {
+            clearInterval(timer);
+            mediaRecorder.stop();
+          }
+        }, frameDurationMs);
+
+        mediaRecorder.onstop = () => resolve();
+        mediaRecorder.onerror = (e) => reject(e);
+      });
+
+      const extension = selectedMime.includes('mp4') ? 'mp4' : 'webm';
+      const videoBlob = new Blob(chunks, { type: selectedMime || 'video/mp4' });
+      const now = new Date(record.created_at || Date.now());
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const prefix = format === 'story' ? 'ig-story-video' : 'scenic-postcard-video';
+      const name = `${prefix}-${fileDate}.${extension}`;
+
+      // Trigger automatic browser download
+      const url = URL.createObjectURL(videoBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      setFileBlob(videoBlob);
+      setFileName(name);
+      setExportNotice('บันทึกวิดีโอสตอรี่สำเร็จ! เริ่มดาวน์โหลดแล้ว');
+      setTimeout(() => setExportNotice(null), 4000);
+    } catch (err) {
+      console.error('Video recording failed:', err);
+      alert('เบราว์เซอร์ไม่รองรับการบันทึกวิดีโอ แนะนำให้ดาวน์โหลดเป็น GIF แทน');
+    } finally {
+      setIsExportingVideo(false);
+      setVideoProgress(0);
+    }
+  };
+
+  // Export as Classic High-Resolution Static PNG
+  const handleExportPng = async () => {
+    if (!record) return;
+    try {
+      const assets = await getOrLoadScenicAssets();
       const postCanvas = document.createElement('canvas');
       const pctx = postCanvas.getContext('2d');
       if (!pctx) return;
 
-      // Determine scenic viewport source: live canvas or authentic scenic illustration using real game assets
-      let scenicSrc: HTMLCanvasElement;
-      if (sourceCanvas) {
-        scenicSrc = sourceCanvas;
-      } else {
-        const assets = await getOrLoadScenicAssets();
-        if (isCancelled && isCancelled()) return;
-
-        scenicSrc = document.createElement('canvas');
-        scenicSrc.width = 960;
-        scenicSrc.height = 720;
-        const sctx = scenicSrc.getContext('2d');
-        if (sctx) {
-          drawAuthenticScenicView(sctx, 960, 720, record, assets);
-        }
+      const scenicSrc = document.createElement('canvas');
+      scenicSrc.width = 960;
+      scenicSrc.height = 720;
+      const sctx = scenicSrc.getContext('2d');
+      if (sctx) {
+        drawAuthenticScenicView(sctx, 960, 720, record, assets, 0);
       }
 
-      if (isCancelled && isCancelled()) return;
-
-      if (currentFormat === 'story') {
+      if (format === 'story') {
         drawStoryCard(postCanvas, pctx, scenicSrc, record);
       } else {
         drawLandscapeCard(postCanvas, pctx, scenicSrc, record);
       }
 
-      const dataUrl = postCanvas.toDataURL('image/png');
       const now = new Date(record.created_at || Date.now());
       const pad = (n: number) => n.toString().padStart(2, '0');
       const fileDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-      const prefix = currentFormat === 'story' ? 'ig-story-running' : 'scenic-postcard';
+      const prefix = format === 'story' ? 'ig-story-running' : 'scenic-postcard';
       const name = `${prefix}-${fileDate}.png`;
 
-      setPreviewUrl(dataUrl);
-      setFileName(name);
+      const dataUrl = postCanvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
 
       postCanvas.toBlob((blob) => {
-        if (!blob) return;
-        setFileBlob(blob);
+        if (blob) {
+          setFileBlob(blob);
+          setFileName(name);
+        }
       }, 'image/png');
+
+      setExportNotice('ดาวน์โหลดรูปภาพ PNG สำเร็จ');
+      setTimeout(() => setExportNotice(null), 3000);
     } catch (err) {
-      console.error('Failed to render postcard:', err);
+      console.error('Failed to export PNG:', err);
     }
-  }
+  };
 
   // Draw 9:16 Vertical Instagram Story (1080 x 1920)
   function drawStoryCard(
@@ -262,8 +558,10 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     scenicSrc: HTMLCanvasElement,
     rec: WorkoutRecord
   ) {
-    postCanvas.width = 1080;
-    postCanvas.height = 1920;
+    if (postCanvas.width !== 1080 || postCanvas.height !== 1920) {
+      postCanvas.width = 1080;
+      postCanvas.height = 1920;
+    }
 
     // 1. Warm Cream Cardstock Gradient (#FAF7F2 to #F3ECE1)
     const bgGrad = pctx.createLinearGradient(0, 0, 0, 1920);
@@ -567,8 +865,10 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     scenicSrc: HTMLCanvasElement,
     rec: WorkoutRecord
   ) {
-    postCanvas.width = 1200;
-    postCanvas.height = 800;
+    if (postCanvas.width !== 1200 || postCanvas.height !== 800) {
+      postCanvas.width = 1200;
+      postCanvas.height = 800;
+    }
 
     // 1. Postcard Base Canvas
     pctx.fillStyle = '#FAF7F2';
@@ -691,13 +991,14 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     pctx.fillText('Treadmill Tracker — Scenic Journey Edition', 1140, 765);
   }
 
-  // Draw Authentic Scenic Illustration with Real Game Assets (Identical to live Scenic Run)
+  // Draw Authentic Scenic Illustration with Real Game Assets and Smooth Animation Time
   function drawAuthenticScenicView(
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
     rec: WorkoutRecord,
-    assets: ScenicAssets
+    assets: ScenicAssets,
+    animTime: number = 0
   ) {
     const date = new Date(rec.created_at || Date.now());
     const theme = getThemeForCurrentTime(date);
@@ -742,16 +1043,20 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, width, height);
 
-    // 2. STARS (Night)
+    // 2. STARS (Night) with soft twinkling
     if (isNight) {
-      ctx.fillStyle = '#FFFFFF';
       for (let i = 0; i < 45; i++) {
         const sx = ((i * 137.5) % width);
         const sy = (((i * 97.3) % (height * 0.48)));
         const sr = (i % 4 === 0 ? 2 : 1.2);
+        const starAlpha = 0.35 + 0.65 * Math.abs(Math.sin(animTime * 2.5 + i * 1.7));
+        ctx.save();
+        ctx.globalAlpha = starAlpha;
+        ctx.fillStyle = '#FFFFFF';
         ctx.beginPath();
         ctx.arc(sx, sy, sr, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
       }
     }
 
@@ -761,20 +1066,22 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     if (isNight && assets.bgMoonCrescent) {
       const moonSize = 56;
       ctx.save();
-      ctx.filter = 'drop-shadow(0 0 16px rgba(254, 240, 138, 0.5))';
-      // PixelLab moon is an 8x8 sheet of 32x32 cells (cell 0,0 is a single crisp golden crescent moon)
+      const moonPulse = 16 + Math.sin(animTime * 2) * 4;
+      ctx.filter = `drop-shadow(0 0 ${moonPulse}px rgba(254, 240, 138, 0.6))`;
+      // PixelLab moon is an 8x8 sheet of 32x32 cells (cell 0,0 is golden crescent moon)
       drawSprite(ctx, assets.bgMoonCrescent, 8, 8, 0, 0, celestialX - moonSize / 2, celestialY - moonSize / 2, moonSize, moonSize);
       ctx.restore();
     } else if (theme === 'sunset' && assets.bgSunSunset) {
       const sunSize = 92;
       drawSprite(ctx, assets.bgSunSunset, 4, 4, 0, 0, celestialX - sunSize / 2, celestialY - sunSize / 2, sunSize, sunSize);
     } else {
-      const glow = ctx.createRadialGradient(celestialX, celestialY, 15, celestialX, celestialY, 65);
+      const glowRadius = 65 + Math.sin(animTime * 2) * 5;
+      const glow = ctx.createRadialGradient(celestialX, celestialY, 15, celestialX, celestialY, glowRadius);
       glow.addColorStop(0, sunGlow);
       glow.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(celestialX, celestialY, 65, 0, Math.PI * 2);
+      ctx.arc(celestialX, celestialY, glowRadius, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = sunColor;
@@ -783,17 +1090,18 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       ctx.fill();
     }
 
-    // 4. FLUFFY CLOUDS (Real asset bgCloud)
+    // 4. FLUFFY CLOUDS with gentle drift
     if (assets.bgCloud) {
       const cloudPositions = [
-        { x: width * 0.10, y: height * 0.08, w: 120, h: 120, alpha: isNight ? 0.35 : 0.8 },
-        { x: width * 0.50, y: height * 0.12, w: 105, h: 105, alpha: isNight ? 0.30 : 0.7 },
-        { x: width * 0.82, y: height * 0.06, w: 130, h: 130, alpha: isNight ? 0.40 : 0.85 },
+        { origX: width * 0.10, y: height * 0.08, w: 120, h: 120, alpha: isNight ? 0.35 : 0.8, speed: 0.8 },
+        { origX: width * 0.50, y: height * 0.12, w: 105, h: 105, alpha: isNight ? 0.30 : 0.7, speed: 1.0 },
+        { origX: width * 0.82, y: height * 0.06, w: 130, h: 130, alpha: isNight ? 0.40 : 0.85, speed: 1.2 },
       ];
       for (const c of cloudPositions) {
+        const cx = (((c.origX + animTime * 14 * c.speed + 150) % (width + 300)) - 150);
         ctx.save();
         ctx.globalAlpha = c.alpha;
-        ctx.drawImage(assets.bgCloud, c.x, c.y, c.w, c.h);
+        ctx.drawImage(assets.bgCloud, cx, c.y, c.w, c.h);
         ctx.restore();
       }
     }
@@ -817,12 +1125,13 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       const tX = skyLandmarkX - tW / 2;
       const tY = landmarkBaseY - tH * 0.94;
       ctx.save();
-      const halo = ctx.createRadialGradient(tX + tW / 2, tY + tH * 0.35, 10, tX + tW / 2, tY + tH * 0.35, 110);
-      halo.addColorStop(0, 'rgba(255, 160, 60, 0.35)');
+      const haloRadius = 110 + Math.sin(animTime * 3) * 8;
+      const halo = ctx.createRadialGradient(tX + tW / 2, tY + tH * 0.35, 10, tX + tW / 2, tY + tH * 0.35, haloRadius);
+      halo.addColorStop(0, 'rgba(255, 160, 60, 0.38)');
       halo.addColorStop(1, 'rgba(255, 120, 30, 0)');
       ctx.fillStyle = halo;
       ctx.beginPath();
-      ctx.arc(tX + tW / 2, tY + tH * 0.35, 110, 0, Math.PI * 2);
+      ctx.arc(tX + tW / 2, tY + tH * 0.35, haloRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.drawImage(assets.bgTokyoTower, tX, tY, tW, tH);
       ctx.restore();
@@ -840,18 +1149,19 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       }
       ctx.drawImage(assets.bgFuji, fujiX, fujiY, fujiW, fujiH);
 
-      // Diamond sparkle on snowy peak
+      // Diamond sparkle on snowy peak with gentle glint
       const sX = fujiX + fujiW * 0.48;
       const sY = fujiY + fujiH * 0.22;
+      const glint = 1 + 0.3 * Math.sin(animTime * 3.5);
       ctx.fillStyle = isNight ? 'rgba(210, 235, 255, 0.9)' : 'rgba(255, 255, 255, 0.95)';
       ctx.beginPath();
-      ctx.arc(sX, sY, 3, 0, Math.PI * 2);
+      ctx.arc(sX, sY, 3 * glint, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = isNight ? 'rgba(210, 235, 255, 0.8)' : 'rgba(255, 255, 255, 0.85)';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(sX - 8, sY); ctx.lineTo(sX + 8, sY);
-      ctx.moveTo(sX, sY - 8); ctx.lineTo(sX, sY + 8);
+      ctx.moveTo(sX - 8 * glint, sY); ctx.lineTo(sX + 8 * glint, sY);
+      ctx.moveTo(sX, sY - 8 * glint); ctx.lineTo(sX, sY + 8 * glint);
       ctx.stroke();
       ctx.restore();
     }
@@ -918,10 +1228,12 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
     ctx.closePath();
     ctx.fill();
 
-    // Dashed Center Lane Line
+    // Dashed Center Lane Line (Smooth gliding motion)
+    const speedKmh = rec.avg_speed_kmh > 0.5 ? rec.avg_speed_kmh : 5.0;
     ctx.strokeStyle = 'rgba(245, 238, 230, 0.85)';
     ctx.lineWidth = 4;
     ctx.setLineDash([26, 20]);
+    ctx.lineDashOffset = -(animTime * (speedKmh * 16)) % 46;
     ctx.beginPath();
     const laneYStart = roadTopY + (roadBottomY - roadTopY) * 0.52;
     const laneYEnd = (roadTopY - inclineOffset) + (roadBottomY - (roadTopY - inclineOffset)) * 0.52;
@@ -993,74 +1305,99 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
       ctx.drawImage(assets.encounterLantern, propX, propY, toroW, toroH);
 
       if (isNight) {
-        const lanternGlow = ctx.createRadialGradient(propX + toroW / 2, propY + 28, 4, propX + toroW / 2, propY + 28, 35);
-        lanternGlow.addColorStop(0, 'rgba(255, 180, 60, 0.45)');
+        const lanternRadius = 35 + 4 * Math.sin(animTime * 4);
+        const lanternGlow = ctx.createRadialGradient(propX + toroW / 2, propY + 28, 4, propX + toroW / 2, propY + 28, lanternRadius);
+        lanternGlow.addColorStop(0, 'rgba(255, 180, 60, 0.50)');
         lanternGlow.addColorStop(1, 'rgba(255, 180, 60, 0)');
         ctx.fillStyle = lanternGlow;
         ctx.beginPath();
-        ctx.arc(propX + toroW / 2, propY + 28, 35, 0, Math.PI * 2);
+        ctx.arc(propX + toroW / 2, propY + 28, lanternRadius, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
-    // 10. RUNNER (Pixel Art Sprite from PixelLab)
+    // 10. RUNNER (Dynamic stride cadence & vertical bounce)
     const runnerX = width * 0.46;
     const runnerRoadY = roadTopY + 48;
     const runnerSpriteW = 86;
     const runnerSpriteH = 86;
     const runnerGroundDy = -runnerSpriteH * (60 / 64);
 
-    // Runner Drop Shadow
+    // Calculate cadence and stride animation
+    const stepsPerMin = 140 + Math.min(50, speedKmh * 5);
+    const cadencePhase = animTime * (stepsPerMin / 60) * Math.PI * 2;
+    const runFrame = Math.floor(cadencePhase / (Math.PI / 2)) % 4;
+    const verticalBounce = Math.abs(Math.sin(cadencePhase)) * 3.5;
+    const forwardLean = 0.04 + Math.min(0.06, (speedKmh / 15) * 0.06);
+
+    // Runner Drop Shadow (scales with bounce)
+    const shadowScale = 1 - verticalBounce / 16;
     ctx.save();
     ctx.translate(runnerX, runnerRoadY);
     ctx.fillStyle = 'rgba(30, 20, 15, 0.28)';
     ctx.beginPath();
-    ctx.ellipse(0, 4, 22, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 4, 22 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
-    // Draw Runner Sprite (Frame 1: dynamic running stride)
+    // Draw Runner Sprite
     if (assets.runnerRun) {
       ctx.save();
-      ctx.translate(runnerX, runnerRoadY);
-      ctx.rotate(0.06);
-      drawSprite(ctx, assets.runnerRun, 4, 4, 1, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
+      ctx.translate(runnerX, runnerRoadY - verticalBounce);
+      ctx.rotate(forwardLean);
+      drawSprite(ctx, assets.runnerRun, 4, 4, runFrame, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
       ctx.restore();
     }
 
-    // 11. PET SHIBA COMPANION (Pixel Art Sprite)
+    // 11. PET SHIBA COMPANION (Trotting stride & joyful bounce)
     const petX = runnerX - 48;
     const petRoadY = runnerRoadY - 4;
     const petDrawSize = 44;
     const petGroundDy = -petDrawSize * (27 / 32);
+
+    const petPhase = cadencePhase * 1.05;
+    const petFrame = Math.floor(petPhase / (Math.PI / 2)) % 4;
+    const petBounce = Math.abs(Math.sin(petPhase)) * 2.8;
+    const petShadowScale = 1 - petBounce / 10;
 
     // Pet Drop Shadow
     ctx.save();
     ctx.translate(petX, petRoadY);
     ctx.fillStyle = 'rgba(30, 20, 15, 0.24)';
     ctx.beginPath();
-    ctx.ellipse(0, 3, 14, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 3, 14 * petShadowScale, 4 * petShadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
-    // Draw Shiba Sprite (Frame 1: playful trot - 8x8 PixelLab sheet)
+    // Draw Shiba Sprite (Cols 0-3 run in 8x8 PixelLab sheet)
     if (assets.petShiba) {
       ctx.save();
-      ctx.translate(petX, petRoadY);
-      drawSprite(ctx, assets.petShiba, 8, 8, 1, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
+      ctx.translate(petX, petRoadY - petBounce);
+      ctx.rotate(0.04);
+      drawSprite(ctx, assets.petShiba, 8, 8, petFrame, 0, -petDrawSize / 2, petGroundDy, petDrawSize, petDrawSize);
       ctx.restore();
     }
 
-    // 12. FALLING SAKURA / AUTUMN PETALS
-    const petalCount = 14;
-    const petalColor = theme === 'sunset' ? 'rgba(235, 120, 70, 0.75)' : 'rgba(255, 185, 205, 0.8)';
+    // 12. FALLING SAKURA / AUTUMN PETALS / SNOW FLAKES
+    const petalCount = 18;
+    const petalColor = theme === 'sunset' 
+      ? 'rgba(235, 120, 70, 0.8)' 
+      : theme === 'night'
+      ? 'rgba(220, 230, 255, 0.75)'
+      : 'rgba(255, 185, 205, 0.85)';
+
     ctx.fillStyle = petalColor;
     for (let i = 0; i < petalCount; i++) {
-      const px = ((i * 73) % width);
-      const py = height * 0.45 + ((i * 47) % (height * 0.5));
+      const speedY = 32 + (i % 5) * 6;
+      const speedX = 18 + (i % 4) * 8;
+      const px = (((i * 73) - animTime * speedX) % (width + 60) + (width + 60)) % (width + 60) - 30;
+      const py = (height * 0.25 + ((i * 47) + animTime * speedY)) % (height * 0.75);
+      const sway = Math.sin(animTime * 3 + i) * 6;
+      const rot = (animTime * 1.5 + i) * 0.4;
+
       ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(0.3 + (i % 5) * 0.2);
+      ctx.translate(px + sway, py);
+      ctx.rotate(rot);
       ctx.beginPath();
       ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1082,11 +1419,14 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-xl">📸</span>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-[#2C2621]">
-                บันทึกภาพความทรงจำ Scenic Run
+              <h3 className="text-base sm:text-lg font-black text-[#2C2621] flex items-center gap-2">
+                <span>บันทึกความทรงจำ Scenic Run</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#52796F]/15 text-[#52796F] font-bold">
+                  ✨ แอนิเมชั่นขยับได้
+                </span>
               </h3>
               <p className="text-[11px] text-[#8C827A]">
-                ภาพความทรงจำพร้อมสถิติวิ่งและตราประทับ สำหรับแชร์ลง Instagram Story หรือบันทึกเก็บไว้
+                สร้างภาพเคลื่อนไหวพร้อมสถิติวิ่งสำหรับแชร์ลง Instagram Story / Reels หรือบันทึกเก็บไว้
               </p>
             </div>
           </div>
@@ -1128,18 +1468,34 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
           </button>
         </div>
 
-        {/* Image Preview Container */}
-        <div className="relative rounded-2xl overflow-hidden shadow-cozy-lg border border-[#EDE6DC] bg-[#F7F4EE] flex items-center justify-center p-2 sm:p-3 max-h-[52vh]">
-          {previewUrl ? (
-            <img 
-              src={previewUrl} 
-              alt="Scenic Postcard" 
-              className="max-h-[48vh] w-auto max-w-full object-contain rounded-xl block select-auto pointer-events-auto shadow-md"
-            />
+        {/* Live Animation Canvas Preview Container */}
+        <div className="relative rounded-2xl overflow-hidden shadow-cozy-lg border border-[#EDE6DC] bg-[#F7F4EE] flex items-center justify-center p-2 sm:p-3 max-h-[50vh]">
+          {isAssetsLoaded ? (
+            <div className="relative max-h-[46vh] flex items-center justify-center">
+              <canvas 
+                ref={canvasRef} 
+                className="max-h-[46vh] w-auto max-w-full object-contain rounded-xl block shadow-md select-none"
+                style={{
+                  aspectRatio: format === 'story' ? '9 / 16' : '3 / 2'
+                }}
+              />
+              <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold flex items-center gap-1.5 pointer-events-none shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>LIVE ANIMATION</span>
+              </div>
+            </div>
           ) : (
             <div className="py-20 text-[#8C827A] text-xs font-mono animate-pulse flex flex-col items-center gap-2">
-              <span className="text-2xl animate-spin">⏳</span>
-              <span>กำลังดึงภาพฉาก Scenic และจัดทำรูปภาพ...</span>
+              <Loader2 className="w-8 h-8 animate-spin text-[#52796F]" />
+              <span>กำลังโหลดฉาก Scenic และจัดทำแอนิเมชั่นสด...</span>
+            </div>
+          )}
+
+          {/* Export Notification Toast */}
+          {exportNotice && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-2 rounded-2xl bg-[#2C2621]/90 backdrop-blur-md text-white text-xs font-semibold shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 z-10">
+              <Sparkles className="w-4 h-4 text-[#E9C46A]" />
+              <span>{exportNotice}</span>
             </div>
           )}
         </div>
@@ -1147,20 +1503,21 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
         {/* Action Buttons & iPad Tip */}
         <div className="space-y-2 pt-1">
           <p className="text-[11px] text-[#8C827A] text-center sm:text-left">
-            💡 <span className="font-semibold text-[#5A5047]">บน iPad/iPhone:</span> แตะภาพค้างไว้ (Long Press) เพื่อเลือก <span className="text-[#C46849] font-bold">"บันทึกรูปภาพ" (Save to Photos)</span> หรือกดปุ่มแชร์เพื่อลง Instagram Story ได้ทันที
+            💡 <span className="font-semibold text-[#5A5047]">แนะนำ:</span> เลือก <span className="text-[#3B664E] font-bold">"ดาวน์โหลด GIF"</span> สำหรับแอนิเมชั่นขนาดเบา หรือ <span className="text-[#9A641F] font-bold">"วิดีโอ (MP4)"</span> เพื่อลง Instagram Story & Reels ได้เนียนตาที่สุด
           </p>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* Native Share button */}
             {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && fileBlob && (
               <button
                 type="button"
                 onClick={async () => {
                   try {
-                    const file = new File([fileBlob], fileName, { type: 'image/png' });
-                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    const shareFile = new File([fileBlob], fileName, { type: fileBlob.type });
+                    if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
                       await navigator.share({
-                        files: [file],
-                        title: 'Treadmill Scenic Run Story',
+                        files: [shareFile],
+                        title: 'Treadmill Scenic Run',
                         text: 'ภาพความทรงจำการวิ่ง Scenic Journey'
                       });
                     }
@@ -1168,28 +1525,76 @@ export const WorkoutPostcardModal: React.FC<WorkoutPostcardModalProps> = ({
                     console.log('Share dismissed:', e);
                   }
                 }}
-                className="flex-1 sm:flex-initial px-4 py-2 rounded-2xl bg-[#52796F] hover:bg-[#3B664E] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer"
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-2xl bg-[#52796F] hover:bg-[#3B664E] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer"
               >
                 <Share2 className="w-4 h-4" />
-                <span>แชร์ลง Instagram Story / บันทึกรูป</span>
+                <span>แชร์ลง IG / รูปภาพ</span>
               </button>
             )}
 
-            {previewUrl && (
-              <a
-                href={previewUrl}
-                download={fileName}
-                className="flex-1 sm:flex-initial px-4 py-2 rounded-2xl bg-[#C46849] hover:bg-[#B3392B] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer text-center"
-              >
-                <Download className="w-4 h-4" />
-                <span>ดาวน์โหลด {format === 'story' ? 'IG Story (9:16)' : 'โปสการ์ด (3:2)'}</span>
-              </a>
-            )}
+            {/* Export Animated GIF button */}
+            <button
+              type="button"
+              disabled={isExportingGif || isExportingVideo}
+              onClick={handleExportGif}
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer ${
+                isExportingGif
+                  ? 'bg-[#E07A5F] text-white opacity-80 cursor-wait'
+                  : 'bg-[#E07A5F] hover:bg-[#D46B4E] text-white'
+              }`}
+            >
+              {isExportingGif ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>กำลังสร้าง GIF ({gifProgress}%)...</span>
+                </>
+              ) : (
+                <>
+                  <Film className="w-4 h-4" />
+                  <span>ดาวน์โหลด GIF ขยับได้</span>
+                </>
+              )}
+            </button>
 
+            {/* Export Looping Video (MP4) button */}
+            <button
+              type="button"
+              disabled={isExportingVideo || isExportingGif}
+              onClick={handleExportVideo}
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer ${
+                isExportingVideo
+                  ? 'bg-[#B8860B] text-white opacity-80 cursor-wait'
+                  : 'bg-[#B8860B] hover:bg-[#9A641F] text-white'
+              }`}
+            >
+              {isExportingVideo ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>กำลังอัดวิดีโอ ({videoProgress}%)...</span>
+                </>
+              ) : (
+                <>
+                  <Film className="w-4 h-4" />
+                  <span>บันทึกวิดีโอ (MP4)</span>
+                </>
+              )}
+            </button>
+
+            {/* Export Classic Static PNG button */}
+            <button
+              type="button"
+              onClick={handleExportPng}
+              className="flex-1 sm:flex-initial px-3.5 py-2 rounded-2xl bg-[#C46849] hover:bg-[#B3392B] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-cozy-sm cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>ภาพนิ่ง (PNG)</span>
+            </button>
+
+            {/* Close Button */}
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-2xl bg-[#EAE3D9] hover:bg-[#DDD5C7] text-[#5A5047] font-bold text-xs transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-2xl bg-[#EAE3D9] hover:bg-[#DDD5C7] text-[#5A5047] font-bold text-xs transition-all cursor-pointer"
             >
               ปิดหน้าต่าง
             </button>
