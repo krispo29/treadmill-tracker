@@ -9,6 +9,7 @@ class ScenicAudioEngine {
   private ctx: AudioContext | null = null;
   private isEnabled: boolean = true;
   private volume: number = 0.5; // 0.0 to 1.0
+  private isDucked: boolean = false; // Ducking mode for Spotify / Podcast playback
 
   // Master Gain Node for ambient sounds
   private masterGain: GainNode | null = null;
@@ -45,9 +46,21 @@ class ScenicAudioEngine {
         const v = parseFloat(savedVol);
         if (!isNaN(v) && v >= 0 && v <= 1) this.volume = v;
       }
+      const savedDucked = localStorage.getItem('scenic_ambient_ducked');
+      if (savedDucked !== null) {
+        this.isDucked = savedDucked === 'true';
+      }
     } catch {
       // Safe fallback if localStorage not available
     }
+  }
+
+  /**
+   * Calculate effective volume factoring in on/off state and audio ducking
+   */
+  public getEffectiveVolume(): number {
+    if (!this.isEnabled) return 0;
+    return this.isDucked ? Math.min(this.volume * 0.25, 0.15) : this.volume;
   }
 
   /**
@@ -65,7 +78,7 @@ class ScenicAudioEngine {
     }
     if (this.ctx && !this.masterGain) {
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(this.isEnabled ? this.volume : 0, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.getEffectiveVolume(), this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
     }
     return !!this.ctx;
@@ -433,12 +446,36 @@ class ScenicAudioEngine {
     } catch {}
 
     if (this.ctx && this.masterGain && this.isEnabled) {
-      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.getEffectiveVolume(), this.ctx.currentTime);
     }
   }
 
   public getVolume(): number {
     return this.volume;
+  }
+
+  /**
+   * One-Tap Ducking for Spotify / Podcast / Video playback (reduces volume to ~20%)
+   */
+  public setDucked(ducked: boolean) {
+    this.isDucked = ducked;
+    try {
+      localStorage.setItem('scenic_ambient_ducked', this.isDucked.toString());
+    } catch {}
+
+    if (this.ctx && this.masterGain && this.isEnabled) {
+      const targetVol = this.getEffectiveVolume();
+      this.masterGain.gain.setTargetAtTime(targetVol, this.ctx.currentTime, 0.1);
+    }
+  }
+
+  public toggleDucked(): boolean {
+    this.setDucked(!this.isDucked);
+    return this.isDucked;
+  }
+
+  public getIsDucked(): boolean {
+    return this.isDucked;
   }
 
   /**
@@ -456,7 +493,7 @@ class ScenicAudioEngine {
     } catch {}
 
     if (this.ctx && this.masterGain) {
-      this.masterGain.gain.setValueAtTime(this.isEnabled ? this.volume : 0, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.getEffectiveVolume(), this.ctx.currentTime);
     }
 
     if (this.isEnabled && this.isRunning) {

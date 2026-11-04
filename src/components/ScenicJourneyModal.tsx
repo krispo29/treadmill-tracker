@@ -38,10 +38,31 @@ import {
   playSteamAchievementChime,
   playTrainWhistleTone,
   getFoodsBurned,
+  OMIYAGE_CATALOG,
+  saveUnlockedOmiyageId,
+  getUnlockedOmiyageIds,
   type AchievementItem
 } from '../services/scenicAchievements';
 import { ScenicAchievementToast } from './ScenicAchievementToast';
 import { ScenicGoshuinModal } from './ScenicGoshuinModal';
+
+// Ticket 3.3: Elevation Segments along the Scenic Route
+export interface ElevationSegment {
+  atDistanceM: number;
+  incline: number;
+  name: string;
+  icon: string;
+}
+
+export const TERRAIN_PROFILE: ElevationSegment[] = [
+  { atDistanceM: 800, incline: 2, name: 'สะพานข้ามคลองเลียบหาด', icon: '🌉' },
+  { atDistanceM: 1800, incline: 4, name: 'ทางขึ้นเนินหมู่บ้านคามาคุระ', icon: '🏡' },
+  { atDistanceM: 2700, incline: 6, name: 'ทางขึ้นเนินศาลเจ้าป่าไผ่เกียวโต', icon: '⛩️' },
+  { atDistanceM: 4000, incline: 4, name: 'เนินหินทางข้ามสะพานเกียวโต', icon: '🪵' },
+  { atDistanceM: 5200, incline: 7, name: 'เนินทุ่งดอกไม้บิเอะฮอกไกโด', icon: '🌸' },
+  { atDistanceM: 6500, incline: 5, name: 'เนินหิมะขุนเขาฮอกไกโด', icon: '🏔️' },
+  { atDistanceM: 7800, incline: 3, name: 'สะพานลอยข้ามแยกโตเกียวเรโทร', icon: '🏙️' },
+];
 
 export type ScenicTheme = 'sakura' | 'countryside' | 'sunset' | 'night';
 export type ScenicWeather = 'clear' | 'rain' | 'mist' | 'autumn';
@@ -198,6 +219,7 @@ interface RainRipple {
   r: number;
   maxR: number;
   alpha: number;
+  active: boolean;
 }
 
 export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
@@ -210,7 +232,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   onSetIncline,
   onStart,
   onStop,
-  onOpenGiantHud
+  onOpenGiantHud,
+  deviceName,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -242,7 +265,34 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   // Phase 3: Flow State Ambient Soundscape State
   const [ambientSoundEnabled, setAmbientSoundEnabled] = useState(() => scenicAudioEngine.getIsEnabled());
   const [ambientVolume, setAmbientVolume] = useState(() => scenicAudioEngine.getVolume());
+  const [ambientDucked, setAmbientDucked] = useState(() => scenicAudioEngine.getIsDucked());
   const [showSoundMenu, setShowSoundMenu] = useState(false);
+
+  // Ticket 2.1: 30fps Battery Saver / Low Power Throttle Mode
+  const [targetFps, setTargetFps] = useState<30 | 60>(() => {
+    try {
+      const saved = localStorage.getItem('scenic_target_fps');
+      return saved === '30' ? 30 : 60;
+    } catch {
+      return 60;
+    }
+  });
+  const targetFpsRef = useRef<30 | 60>(targetFps);
+  useEffect(() => {
+    targetFpsRef.current = targetFps;
+    try {
+      localStorage.setItem('scenic_target_fps', targetFps.toString());
+    } catch {}
+  }, [targetFps]);
+
+  const handleToggleFps = () => {
+    setTargetFps((prev) => (prev === 60 ? 30 : 60));
+  };
+
+  const handleToggleAudioDucking = () => {
+    const nextDucked = scenicAudioEngine.toggleDucked();
+    setAmbientDucked(nextDucked);
+  };
 
   // Phase 3: Start/Stop Flow State Audio Engine when Modal Opens/Closes
   useEffect(() => {
@@ -327,6 +377,118 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
   const encounteredTanukiRef = useRef<boolean>(false);
   const encounteredCowRef = useRef<boolean>(false);
   const encounteredMailboxCatRef = useRef<boolean>(false);
+
+  // Ticket 3.2: Roadside Mystery Omiyage Drop tracking
+  const droppedOmiyageEncountersRef = useRef<Set<string>>(new Set());
+  const triggerOmiyageDrop = useCallback((encounterId: string, region: 'kamakura' | 'kyoto' | 'hokkaido' | 'tokyo') => {
+    if (droppedOmiyageEncountersRef.current.has(encounterId)) return;
+    droppedOmiyageEncountersRef.current.add(encounterId);
+
+    const regionItems = OMIYAGE_CATALOG.filter((item) => item.region === region);
+    if (regionItems.length === 0) return;
+
+    const unlocked = new Set(getUnlockedOmiyageIds(activeProfile.id));
+    const unobtained = regionItems.filter((i) => !unlocked.has(i.id));
+    const candidate = unobtained.length > 0
+      ? unobtained[Math.floor(Math.random() * unobtained.length)]
+      : regionItems[Math.floor(Math.random() * regionItems.length)];
+
+    saveUnlockedOmiyageId(activeProfile.id, candidate.id);
+    setMilestoneToast(`🎁 ได้รับของที่ระลึก: ${candidate.name} ${candidate.emoji} เก็บเข้าตู้สะสมแล้ว!`);
+    setTimeout(() => setMilestoneToast(null), 4500);
+    if (ambientAudioCtxRef.current) {
+      playSteamAchievementChime(ambientAudioCtxRef.current);
+    }
+  }, [activeProfile.id]);
+
+  // Ticket 3.3: Auto-Incline Terrain Profile & Safety Warning Protocol
+  const [autoInclineEnabled, setAutoInclineEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('scenic_auto_incline_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [inclineWarning, setInclineWarning] = useState<{
+    segment: ElevationSegment;
+    countdown: number;
+  } | null>(null);
+
+  const warnedSegmentDistRef = useRef<number>(-1);
+  const cancelledSegmentDistRef = useRef<number>(-1);
+
+  const handleToggleAutoIncline = () => {
+    setAutoInclineEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('scenic_auto_incline_enabled', next.toString());
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleCancelAutoIncline = () => {
+    if (inclineWarning) {
+      cancelledSegmentDistRef.current = inclineWarning.segment.atDistanceM;
+      setInclineWarning(null);
+      setMilestoneToast(`✕ ยกเลิกการปรับความชัน ${inclineWarning.segment.name}`);
+      setTimeout(() => setMilestoneToast(null), 3000);
+    }
+  };
+
+  const handleAcceptAutoInclineImmediately = () => {
+    if (inclineWarning) {
+      const seg = inclineWarning.segment;
+      onSetIncline(seg.incline);
+      setTargetIncline(seg.incline);
+      cancelledSegmentDistRef.current = seg.atDistanceM;
+      setInclineWarning(null);
+      setMilestoneToast(`⛰️ ปรับความชันเป็นระดับ ${seg.incline} ตามภูมิประเทศ: ${seg.name}`);
+      setTimeout(() => setMilestoneToast(null), 3500);
+    }
+  };
+
+  // Incline Warning Countdown Timer Effect
+  useEffect(() => {
+    if (!inclineWarning) return;
+    if (inclineWarning.countdown <= 0) {
+      const seg = inclineWarning.segment;
+      onSetIncline(seg.incline);
+      setTargetIncline(seg.incline);
+      cancelledSegmentDistRef.current = seg.atDistanceM;
+      setInclineWarning(null);
+      setMilestoneToast(`⛰️ ปรับความชันเป็นระดับ ${seg.incline} ตามภูมิประเทศ: ${seg.name}`);
+      setTimeout(() => setMilestoneToast(null), 3500);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setInclineWarning((prev) => prev ? { ...prev, countdown: prev.countdown - 1 } : null);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [inclineWarning, onSetIncline]);
+
+  // Check upcoming terrain elevation segments
+  useEffect(() => {
+    if (!autoInclineEnabled || metrics.speedKmh <= 0.1) return;
+    const curDist = metrics.distanceMeters;
+
+    for (let i = 0; i < TERRAIN_PROFILE.length; i++) {
+      const seg = TERRAIN_PROFILE[i];
+      if (curDist >= seg.atDistanceM - 35 && curDist < seg.atDistanceM) {
+        if (warnedSegmentDistRef.current !== seg.atDistanceM && cancelledSegmentDistRef.current !== seg.atDistanceM) {
+          warnedSegmentDistRef.current = seg.atDistanceM;
+          setInclineWarning({ segment: seg, countdown: 5 });
+          if (ambientAudioCtxRef.current) {
+            playSteamAchievementChime(ambientAudioCtxRef.current);
+          }
+          break;
+        }
+      }
+    }
+  }, [metrics.distanceMeters, autoInclineEnabled, metrics.speedKmh]);
 
   // Stage Tracking & Celebratory Announcement (Kamakura -> Kyoto -> Hokkaido -> Tokyo)
   const lastAcknowledgedStageRef = useRef<StageId>(getStageForDistance(metrics.distanceMeters || 0));
@@ -1000,6 +1162,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     trainActive: boolean;
     trainCooldown: number;
     trainWhistlePlayed: boolean;
+    lastRenderTime: number;
     particles: Particle[];
     ripples: RainRipple[];
   }>({
@@ -1012,6 +1175,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     windTime: 0,
     smoothDistance: metrics.distanceMeters || 0,
     lastTime: 0,
+    lastRenderTime: 0,
     celebrationTimer: 0,
     lastWeather: 'clear',
     pacerDistance: 0,
@@ -1021,7 +1185,14 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     trainCooldown: 12,
     trainWhistlePlayed: false,
     particles: [],
-    ripples: [],
+    ripples: Array.from({ length: 24 }, () => ({
+      x: 0,
+      y: 0,
+      r: 0,
+      maxR: 0,
+      alpha: 0,
+      active: false,
+    })),
   });
 
   // Update clock every 10 seconds to auto-transition time periods smoothly
@@ -1565,6 +1736,15 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     handleResize();
     window.addEventListener('resize', handleResize);
 
+    // Ticket 2.3: Responsive layout tracking for iPad Split View & dynamic resizing
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(containerRef.current);
+    }
+
     /**
      * Smart Sprite Drawer:
      * If image is a 256x256 PixelLab sprite sheet grid (e.g. 8x8, 4x4, 2x2),
@@ -1593,10 +1773,22 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     };
 
     // ==========================================
-    // MAIN RENDER LOOP (60 FPS)
+    // MAIN RENDER LOOP (60 FPS / 30 FPS Battery Saver)
     // ==========================================
     const render = (currentTime: number) => {
       const state = animStateRef.current;
+      const targetFps = targetFpsRef.current;
+
+      // Ticket 2.1: Throttle rendering when in 30 FPS Battery Saver mode
+      if (targetFps === 30) {
+        const frameInterval = 32; // ~30 fps threshold (33.3ms)
+        if (state.lastRenderTime && currentTime - state.lastRenderTime < frameInterval) {
+          animationFrameId = requestAnimationFrame(render);
+          return;
+        }
+      }
+      state.lastRenderTime = currentTime;
+
       const metrics = metricsRef.current;
       const theme = themeRef.current;
       const companion = companionRef.current;
@@ -2090,6 +2282,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         if (!state.trainWhistlePlayed && state.trainX > width * 0.08) {
           state.trainWhistlePlayed = true;
           encounteredTrainRef.current = true;
+          triggerOmiyageDrop('train_' + Math.floor(currentDistanceMeters / 1200), 'kamakura');
           if (soundEnabled) {
             playTrainWhistleTone(ambientAudioCtxRef.current);
           }
@@ -2245,23 +2438,26 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.stroke();
       ctx.setLineDash([]); // Reset dash
 
-      // Phase 2: Animated Water Puddle Ripples on Road (in Rain Weather)
-      if (curWeather === 'rain' && state.ripples.length > 0) {
+      // Phase 2: Animated Water Puddle Ripples on Road (in Rain Weather - Zero GC Object Pool)
+      if (curWeather === 'rain') {
         ctx.save();
-        state.ripples.forEach((r) => {
+        for (let i = 0; i < state.ripples.length; i++) {
+          const r = state.ripples[i];
+          if (!r.active) continue;
           r.r += 0.75;
           r.alpha -= 0.035;
-          if (r.alpha > 0) {
-            ctx.strokeStyle = theme === 'night' 
-              ? `rgba(180, 215, 245, ${r.alpha * 0.45})` 
-              : `rgba(215, 235, 255, ${r.alpha * 0.6})`;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.ellipse(r.x, r.y, r.r, r.r * 0.35, 0, 0, Math.PI * 2);
-            ctx.stroke();
+          if (r.alpha <= 0) {
+            r.active = false;
+            continue;
           }
-        });
-        state.ripples = state.ripples.filter((r) => r.alpha > 0);
+          ctx.strokeStyle = theme === 'night' 
+            ? `rgba(180, 215, 245, ${r.alpha * 0.45})` 
+            : `rgba(215, 235, 255, ${r.alpha * 0.6})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.ellipse(r.x, r.y, r.r, r.r * 0.35, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
@@ -2430,6 +2626,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const isNear = distToRunner < 120;
           if (isNear) {
             encounteredDeerRef.current = true;
+            triggerOmiyageDrop('deer_' + deerDist, 'kamakura');
           }
 
           const bowAngle = isNear ? Math.sin(windTime * 5) * 0.10 : 0;
@@ -2488,6 +2685,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const isNear = distToRunner < 110;
           if (isNear) {
             encounteredLanternRef.current = true;
+            triggerOmiyageDrop('lantern_' + lanternDist, 'kamakura');
           }
 
           ctx.save();
@@ -2581,6 +2779,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const isNear = distToRunner < 120;
           if (isNear) {
             encounteredTanukiRef.current = true;
+            triggerOmiyageDrop('tanuki_' + tanukiDist, 'kyoto');
           }
 
           const tanukiHop = isNear ? Math.abs(Math.sin(windTime * 6)) * 6 : 0;
@@ -2636,6 +2835,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const isNear = distToRunner < 120;
           if (isNear) {
             encounteredCowRef.current = true;
+            triggerOmiyageDrop('cow_' + cowDist, 'hokkaido');
           }
 
           const cowBob = Math.sin(windTime * 3) * 2;
@@ -2689,6 +2889,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           const isNear = distToRunner < 120;
           if (isNear) {
             encounteredMailboxCatRef.current = true;
+            triggerOmiyageDrop('cat_' + catDist, 'tokyo');
           }
 
           const catPawWave = isNear ? Math.sin(windTime * 7) * 0.15 : 0;
@@ -2749,6 +2950,10 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       ctx.fill();
       ctx.restore();
 
+      // Ticket 3.1: Incline Trekking Mode Detection (Steep Incline + Walking Cadence)
+      const isTrekking = isMoving && metrics.inclineLevel >= 6 && speed < 5.8;
+      const trekLean = isTrekking ? 0.12 : 0;
+
       // ==========================================
       // DRAW RUNNER (Pixel Art Sprite from PixelLab or Vector Fallback)
       // ==========================================
@@ -2760,11 +2965,76 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       if (isMoving && assets.runnerRun) {
         ctx.save();
         ctx.translate(runnerX, runnerRoadY - verticalBounce);
-        ctx.rotate(-inclineAngle + forwardLean);
+        ctx.rotate(-inclineAngle + forwardLean + trekLean);
         // Row 0 has 4 running frames, synced to treadmill cadence
         const runFrame = Math.floor(cadencePhase / (Math.PI / 2)) % 4;
         drawSprite(assets.runnerRun, 4, 4, runFrame, 0, -runnerSpriteW / 2, runnerGroundDy, runnerSpriteW, runnerSpriteH);
+
+        // If in Incline Trekking mode, render trail daypack and trekking pole
+        if (isTrekking) {
+          // 1. Trail Hiking Daypack (Warm Terracotta / Cedar)
+          ctx.save();
+          ctx.fillStyle = '#B85737';
+          ctx.strokeStyle = '#2C2621';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.roundRect(-24, runnerGroundDy + 22, 12, 22, 4);
+          ctx.fill();
+          ctx.stroke();
+          // Backpack buckle
+          ctx.fillStyle = '#D4AF37';
+          ctx.beginPath();
+          ctx.arc(-18, runnerGroundDy + 32, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          // 2. Trekking Pole in Hand swinging with cadence
+          ctx.save();
+          const poleAngle = Math.sin(cadencePhase) * 0.35 + 0.12;
+          ctx.translate(6, runnerGroundDy + 36);
+          ctx.rotate(poleAngle);
+          // Pole aluminum shaft
+          ctx.strokeStyle = '#2C2621';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(0, -10);
+          ctx.lineTo(2, 40);
+          ctx.stroke();
+          // Cork grip handle
+          ctx.strokeStyle = '#D4AF37';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(0, -10);
+          ctx.lineTo(0, -1);
+          ctx.stroke();
+          // Snow/mud basket ring
+          ctx.fillStyle = '#7A6E65';
+          ctx.beginPath();
+          ctx.arc(2, 34, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
         ctx.restore();
+
+        // 3. Cute Floating Trekking Mode Pill above runner's head
+        if (isTrekking) {
+          ctx.save();
+          ctx.translate(runnerX, runnerRoadY - verticalBounce - runnerSpriteH - 4);
+          ctx.fillStyle = 'rgba(184, 87, 55, 0.92)';
+          ctx.strokeStyle = '#FAF7F2';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.roundRect(-52, -18, 104, 20, 8);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🥾 เดินไต่เขา (Incline Trek)', 0, -8);
+          ctx.restore();
+        }
       } else if (!isMoving && assets.runnerIdle) {
         ctx.save();
         ctx.translate(runnerX, runnerRoadY - verticalBounce);
@@ -3230,16 +3500,18 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           ctx.lineTo(p.x + p.vx * 1.5, p.y + p.vy * 1.5);
           ctx.stroke();
 
-          // Spawn puddle ripple on pavement
+          // Spawn puddle ripple on pavement using pre-allocated object pool (Zero GC allocation)
           const currentRoadY = roadLeftY + (roadRightY - roadLeftY) * ((p.x - (-20)) / (width + 40));
-          if (p.y >= currentRoadY && p.y <= currentRoadY + 32 && state.ripples.length < 20 && Math.random() < 0.25) {
-            state.ripples.push({
-              x: p.x,
-              y: p.y,
-              r: 1.5,
-              maxR: 9 + Math.random() * 6,
-              alpha: 0.8,
-            });
+          if (p.y >= currentRoadY && p.y <= currentRoadY + 32 && Math.random() < 0.25) {
+            const freeRipple = state.ripples.find((r) => !r.active);
+            if (freeRipple) {
+              freeRipple.x = p.x;
+              freeRipple.y = p.y;
+              freeRipple.r = 1.5;
+              freeRipple.maxR = 9 + Math.random() * 6;
+              freeRipple.alpha = 0.8;
+              freeRipple.active = true;
+            }
           }
         } else if (p.type === 'autumn') {
           // Vibrant Autumn Maple Leaf (Momiji)
@@ -3293,6 +3565,7 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
+      resizeObserver?.disconnect();
     };
   }, [isOpen]);
 
@@ -3393,8 +3666,8 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         <div className="absolute inset-0 bg-white pointer-events-none z-50 animate-out fade-out duration-300" />
       )}
 
-      {/* TOP FLOATING CONTROL BAR */}
-      <div className={`relative z-20 p-3 sm:p-4 flex items-center justify-between gap-2 transition-all duration-300 ${
+      {/* TOP FLOATING CONTROL BAR (Responsive for iPad Split View & Mobile) */}
+      <div className={`relative z-20 p-2 sm:p-4 flex flex-wrap items-center justify-between gap-2 transition-all duration-300 ${
         zenMode ? 'opacity-20 hover:opacity-100' : 'opacity-100'
       }`}>
         {/* Left: Stage Progress & Theme Switcher & Companion Picker */}
@@ -3723,12 +3996,82 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
           </div>
         </div>
 
-        {/* Right: Quick Toggles (Zen Mode / Sound / Giant HUD / Close) */}
-        <div className="flex items-center gap-2">
+        {/* Right: Quick Toggles (Zen Mode / Sound / Ducking / FPS / Giant HUD / Close) */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* Connection / Standalone Manual Status Pill */}
+          <div 
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/90 backdrop-blur-md border border-[#EDE6DC] text-xs font-semibold shadow-cozy-sm select-none"
+            title={deviceName && !deviceName.includes('Simulation') && !deviceName.includes('Manual') && !deviceName.includes('Virtual')
+              ? `เชื่อมต่อกับ ${deviceName}`
+              : 'โหมดวิ่งอิสระ (Manual Jog): ไม่ต้องเชื่อมบลูทูธ สามารถปรับความเร็วบนจอและเริ่มวิ่งได้ทันที'}
+          >
+            {deviceName && !deviceName.includes('Simulation') && !deviceName.includes('Manual') && !deviceName.includes('Virtual') ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[#3B664E] font-bold truncate max-w-[100px] sm:max-w-[150px]">
+                  {deviceName}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-xs">📱</span>
+                <span className="text-[#7A6E65] font-bold hidden sm:inline">โหมดวิ่งอิสระ</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-[#FAF7F2] text-[#8C827A] border border-[#EBE3D7]">Manual</span>
+              </>
+            )}
+          </div>
+
+          {/* Ticket 2.2: Audio Ducking Quick Toggle for Spotify / Podcast */}
+          {ambientSoundEnabled && (
+            <button
+              type="button"
+              onClick={handleToggleAudioDucking}
+              className={`px-2.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md border transition-all cursor-pointer shadow-cozy-sm active:scale-95 ${
+                ambientDucked
+                  ? 'bg-[#EBF5FB] text-[#2980B9] border-[#A9CCE3] shadow-cozy-sm ring-1 ring-[#5DADE2]'
+                  : 'bg-white/85 text-[#5A5047] border-[#EDE6DC] hover:bg-white'
+              }`}
+              title={ambientDucked ? 'โหมดหรี่เสียงธรรมชาติเปิดอยู่ (เหมาะสำหรับเปิดเพลง/Spotify) • คลิกเพื่อคืนระดับเสียงปกติ' : 'คลิกเพื่อหรี่เสียงธรรมชาติลง 75% (ฟังเพลงหรือ Podcast ใน Spotify ควบคู่)'}
+            >
+              <span>🎧</span>
+              <span className="hidden xl:inline">{ambientDucked ? 'หรี่เสียงเพลง' : 'เปิดเพลง'}</span>
+            </button>
+          )}
+
+          {/* Ticket 2.1: 30fps / 60fps Battery Saver Toggle */}
+          <button
+            type="button"
+            onClick={handleToggleFps}
+            className={`px-2.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md border transition-all cursor-pointer shadow-cozy-sm active:scale-95 ${
+              targetFps === 30
+                ? 'bg-[#FEF9E7] text-[#B7950B] border-[#F9E79F] shadow-cozy-sm ring-1 ring-[#F5BA42]'
+                : 'bg-white/85 text-[#5A5047] border-[#EDE6DC] hover:bg-white'
+            }`}
+            title={targetFps === 30 ? 'โหมด 30 FPS ถนอมแบตเตอรี่ & ลดความร้อน • คลิกเพื่อสลับเป็น 60 FPS ลื่นไหล' : 'โหมด 60 FPS ลื่นไหล • คลิกเพื่อสลับเป็น 30 FPS ถนอมแบตเตอรี่'}
+          >
+            <span>{targetFps === 30 ? '🔋' : '⚡'}</span>
+            <span className="font-mono text-[11px] font-bold">{targetFps}fps</span>
+          </button>
+
+          {/* Ticket 3.3: Auto-Incline Mountain Elevation Sync Toggle */}
+          <button
+            type="button"
+            onClick={handleToggleAutoIncline}
+            className={`px-2.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md border transition-all cursor-pointer shadow-cozy-sm active:scale-95 ${
+              autoInclineEnabled
+                ? 'bg-[#EBF5FB] text-[#2980B9] border-[#A9CCE3] shadow-cozy-sm ring-1 ring-[#5DADE2]'
+                : 'bg-white/85 text-[#5A5047] border-[#EDE6DC] hover:bg-white'
+            }`}
+            title={autoInclineEnabled ? 'ระบบไต่เขาตามวิว (Auto-Incline) เปิดอยู่ พร้อมเตือนล่วงหน้า 5 วินาที • คลิกเพื่อปิด' : 'คลิกเพื่อเปิดระบบไต่เขาตามวิว (Auto-Incline Simulation) พร้อมระบบความปลอดภัยเตือนล่วงหน้า 5 วินาที'}
+          >
+            <span>⛰️</span>
+            <span className="hidden xl:inline">{autoInclineEnabled ? 'ไต่เขาตามวิว' : 'ความชันคงที่'}</span>
+          </button>
+
           {/* Zen Minimal Mode Toggle */}
           <button
             onClick={() => setZenMode(!zenMode)}
-            className={`px-3 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md border transition-all cursor-pointer shadow-cozy-sm ${
+            className={`px-3 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md border transition-all cursor-pointer shadow-cozy-sm active:scale-95 ${
               zenMode
                 ? 'bg-[#52796F] text-white border-[#52796F]'
                 : 'bg-white/85 text-[#5A5047] border-[#EDE6DC] hover:bg-white'
@@ -3849,6 +4192,32 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                       ))}
                     </div>
                   )}
+
+                  {/* One-Tap Spotify Ducking Toggle */}
+                  {ambientSoundEnabled && (
+                    <div className="pt-2 mt-1 border-t border-[#F5EFE6] flex items-center justify-between">
+                      <div>
+                        <div className="text-[11px] font-bold text-[#2C2621] flex items-center gap-1">
+                          <span>🎧</span>
+                          <span>โหมดเปิดเพลง (Spotify)</span>
+                        </div>
+                        <div className="text-[9px] text-[#8C827A]">
+                          หรี่เสียงธรรมชาติเหลือ 25% ให้เสียงเพลงเด่น
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleToggleAudioDucking}
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                          ambientDucked
+                            ? 'bg-[#2980B9] text-white shadow-cozy-sm'
+                            : 'bg-[#F3EFE6] text-[#8C827A] hover:bg-[#EAE3D9]'
+                        }`}
+                      >
+                        {ambientDucked ? 'หรี่อยู่' : 'ปกติ'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Section 2: SFX & Footsteps */}
@@ -3956,11 +4325,11 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
         </div>
       )}
 
-      {/* CENTER HUD: TELEMETRY PILLS (Hidden or minimized in Zen Mode) */}
-      <div className={`relative z-10 mx-auto max-w-4xl w-full px-4 pt-2 transition-all duration-300 pointer-events-none ${
+      {/* CENTER HUD: TELEMETRY PILLS (Hidden or minimized in Zen Mode, Responsive Grid) */}
+      <div className={`relative z-10 mx-auto max-w-4xl w-full px-2 sm:px-4 pt-1 sm:pt-2 transition-all duration-300 pointer-events-none ${
         zenMode ? 'opacity-40 hover:opacity-100' : 'opacity-100'
       }`}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pointer-events-auto">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 pointer-events-auto">
           {/* SPEED PILL */}
           <div className="bg-white/85 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 border border-[#EDE6DC] shadow-cozy-sm flex items-center justify-between">
             <div>
@@ -4165,99 +4534,130 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
       {/* SPACER FOR VIEWING SCENERY */}
       <div className="flex-1" />
 
-      {/* BOTTOM QUICK TREADMILL CONTROLS BAR (Collapsible in Zen Mode) */}
-      <div className={`relative z-20 max-w-3xl w-full mx-auto p-3 sm:p-4 mb-2 transition-all duration-300 ${
+      {/* BOTTOM QUICK TREADMILL CONTROLS BAR (Collapsible in Zen Mode, Runner Ergonomic >= 56px Hit Area) */}
+      <div className={`relative z-20 max-w-4xl w-full mx-auto p-2 sm:p-4 mb-2 transition-all duration-300 ${
         zenMode ? 'opacity-0 translate-y-6 pointer-events-none' : 'opacity-100 translate-y-0'
       }`}>
-        <div className="bg-white/90 backdrop-blur-md rounded-3xl p-3.5 sm:p-4 border border-[#EDE6DC] shadow-cozy-lg space-y-3">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-3 sm:p-4 border-2 border-[#EAE3D9] shadow-cozy-xl space-y-3">
           
-          {/* Main Controls Row */}
+          {/* Main Controls Row: Start/Stop, Speed Stepper, Incline Stepper */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Start / Stop Belt */}
             {isRunning ? (
               <button
+                type="button"
                 onClick={onStop}
-                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-2xl bg-[#FDF0F0] text-[#B94A4A] hover:bg-[#FBE4E4] border border-[#F4CECE] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all shadow-cozy-sm"
+                className="flex-1 sm:flex-initial h-14 sm:h-16 px-6 sm:px-8 rounded-2xl sm:rounded-3xl bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 font-black text-sm sm:text-base flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 transition-all shadow-cozy-md select-none"
               >
-                <Square className="w-4 h-4 fill-current" />
+                <Square className="w-5 h-5 fill-current" />
                 <span>หยุดสายพาน (Stop)</span>
               </button>
             ) : (
               <button
+                type="button"
                 onClick={() => onStart(targetSpeed)}
-                className="flex-1 sm:flex-initial px-6 py-2.5 rounded-2xl bg-[#52796F] text-white hover:bg-[#43675E] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all shadow-cozy-lg"
+                className="flex-1 sm:flex-initial h-14 sm:h-16 px-6 sm:px-8 rounded-2xl sm:rounded-3xl bg-[#3B664E] hover:bg-[#2C4F3B] text-white border-2 border-[#2C4F3B] font-black text-sm sm:text-base flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 transition-all shadow-cozy-lg select-none"
               >
-                <Play className="w-4 h-4 fill-current" />
+                <Play className="w-5 h-5 fill-current" />
                 <span>เริ่มเดิน ({targetSpeed.toFixed(1)} km/h)</span>
               </button>
             )}
 
-            {/* Quick Speed Stepper */}
-            <div className="flex items-center gap-1.5 bg-[#FAF7F2] p-1 rounded-2xl border border-[#EDE6DC]">
-              <span className="text-[10px] font-bold text-[#8C827A] px-2 hidden sm:inline">สปีด:</span>
+            {/* Quick Speed Stepper (Large Touch Targets >= 56px) */}
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-[#FAF7F2] p-1.5 sm:p-2 rounded-2xl sm:rounded-3xl border border-[#EDE6DC] shadow-inner">
+              <span className="text-[11px] font-black uppercase text-[#8C827A] px-1 hidden md:inline">
+                สปีด:
+              </span>
               <button
+                type="button"
                 onClick={() => handleAdjustSpeed(-0.5)}
-                className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#F3EFE6] text-xs font-bold text-[#5A5047] border border-[#E5DDD0] cursor-pointer"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white hover:bg-[#F3EFE6] text-xs sm:text-sm font-black text-[#443830] border-2 border-[#E5DDD0] shadow-sm flex items-center justify-center cursor-pointer active:scale-90 transition-all select-none"
+                title="ลดความเร็ว 0.5 km/h"
               >
                 -0.5
               </button>
               <button
+                type="button"
                 onClick={() => handleAdjustSpeed(-0.1)}
-                className="px-2 py-1 rounded-xl bg-white hover:bg-[#F3EFE6] text-xs font-bold text-[#5A5047] border border-[#E5DDD0] cursor-pointer"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white hover:bg-[#F3EFE6] text-xs sm:text-sm font-black text-[#443830] border-2 border-[#E5DDD0] shadow-sm flex items-center justify-center cursor-pointer active:scale-90 transition-all select-none"
+                title="ลดความเร็ว 0.1 km/h"
               >
                 -0.1
               </button>
-              <span className="px-2 font-mono font-bold text-sm text-[#2C2621]">
-                {targetSpeed.toFixed(1)}
-              </span>
+              <div className="min-w-[64px] sm:min-w-[76px] text-center px-1">
+                <div className="font-mono font-black text-base sm:text-xl text-[#2C2621] leading-none">
+                  {targetSpeed.toFixed(1)}
+                </div>
+                <div className="text-[9px] uppercase font-bold text-[#8C827A] mt-0.5">
+                  km/h
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => handleAdjustSpeed(+0.1)}
-                className="px-2 py-1 rounded-xl bg-white hover:bg-[#F3EFE6] text-xs font-bold text-[#5A5047] border border-[#E5DDD0] cursor-pointer"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white hover:bg-[#F3EFE6] text-xs sm:text-sm font-black text-[#443830] border-2 border-[#E5DDD0] shadow-sm flex items-center justify-center cursor-pointer active:scale-90 transition-all select-none"
+                title="เพิ่มความเร็ว 0.1 km/h"
               >
                 +0.1
               </button>
               <button
+                type="button"
                 onClick={() => handleAdjustSpeed(+0.5)}
-                className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#F3EFE6] text-xs font-bold text-[#5A5047] border border-[#E5DDD0] cursor-pointer"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white hover:bg-[#F3EFE6] text-xs sm:text-sm font-black text-[#443830] border-2 border-[#E5DDD0] shadow-sm flex items-center justify-center cursor-pointer active:scale-90 transition-all select-none"
+                title="เพิ่มความเร็ว 0.5 km/h"
               >
                 +0.5
               </button>
             </div>
 
-            {/* Quick Incline Stepper */}
-            <div className="flex items-center gap-1.5 bg-[#FAF7F2] p-1 rounded-2xl border border-[#EDE6DC]">
-              <span className="text-[10px] font-bold text-[#8C827A] px-2 hidden sm:inline">ชัน:</span>
+            {/* Quick Incline Stepper (Large Touch Targets >= 56px) */}
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-[#FAF7F2] p-1.5 sm:p-2 rounded-2xl sm:rounded-3xl border border-[#EDE6DC] shadow-inner">
+              <span className="text-[11px] font-black uppercase text-[#8C827A] px-1 hidden md:inline">
+                ชัน:
+              </span>
               <button
+                type="button"
                 onClick={() => handleAdjustIncline(-1)}
                 disabled={targetIncline <= 0}
-                className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#F3EFE6] text-xs font-bold text-[#5A5047] border border-[#E5DDD0] disabled:opacity-40 cursor-pointer"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white hover:bg-[#F3EFE6] text-sm sm:text-base font-black text-[#443830] border-2 border-[#E5DDD0] shadow-sm flex items-center justify-center cursor-pointer active:scale-90 transition-all select-none disabled:opacity-30 disabled:pointer-events-none"
+                title="ลดความชัน 1 ระดับ"
               >
                 -1
               </button>
-              <span className="px-2 font-mono font-bold text-sm text-[#C46849]">
-                {targetIncline}
-              </span>
+              <div className="min-w-[44px] sm:min-w-[54px] text-center px-1">
+                <div className="font-mono font-black text-base sm:text-xl text-[#C46849] leading-none">
+                  {targetIncline}
+                </div>
+                <div className="text-[9px] uppercase font-bold text-[#8C827A] mt-0.5">
+                  level
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => handleAdjustIncline(+1)}
                 disabled={targetIncline >= 20}
-                className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#F3EFE6] text-xs font-bold text-[#5A5047] border border-[#E5DDD0] disabled:opacity-40 cursor-pointer"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white hover:bg-[#F3EFE6] text-sm sm:text-base font-black text-[#443830] border-2 border-[#E5DDD0] shadow-sm flex items-center justify-center cursor-pointer active:scale-90 transition-all select-none disabled:opacity-30 disabled:pointer-events-none"
+                title="เพิ่มความชัน 1 ระดับ"
               >
                 +1
               </button>
             </div>
           </div>
 
-          {/* Quick Favorite Speed Preset Buttons */}
-          <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-[#F0EBE1] text-xs">
-            <span className="text-[11px] text-[#8C827A] hidden sm:inline">ทางลัดสปีด:</span>
-            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+          {/* Quick Favorite Speed Preset Buttons (Enlarged for Runners) */}
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#F0EBE1]">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-[#8C827A] hidden sm:inline">ทางลัดสปีด:</span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-0.5">
               {(activeProfile?.favoriteSpeeds || [3.0, 4.5, 6.0, 8.0]).map((spd) => (
                 <button
                   key={spd}
+                  type="button"
                   onClick={() => handleDirectSpeed(spd)}
-                  className={`px-3 py-1 rounded-xl font-bold font-mono text-xs transition-all cursor-pointer border ${
+                  className={`h-11 sm:h-12 min-w-[54px] sm:min-w-[62px] px-3.5 rounded-xl sm:rounded-2xl font-black font-mono text-xs sm:text-sm transition-all cursor-pointer border-2 active:scale-95 shadow-sm ${
                     Math.abs(metrics.speedKmh - spd) < 0.1
-                      ? 'bg-[#52796F] text-white border-[#52796F]'
+                      ? 'bg-[#3B664E] text-white border-[#2C4F3B] shadow-md'
                       : 'bg-[#FAF7F2] text-[#5A5047] border-[#EDE6DC] hover:bg-[#F3EFE6]'
                   }`}
                 >
@@ -4265,13 +4665,77 @@ export const ScenicJourneyModal: React.FC<ScenicJourneyModalProps> = ({
                 </button>
               ))}
             </div>
-            <span className="text-[10px] text-[#8C827A] hidden md:inline">
-              แตะที่ใดก็ได้บนภาพเพื่อซ่อน/เปิด HUD
+            <span className="text-[10px] text-[#8C827A] hidden lg:inline font-medium">
+              แตะที่ใดก็ได้บนภาพเพื่อสลับโหมดเซน (Zen Mode)
             </span>
           </div>
 
         </div>
       </div>
+
+      {/* TICKET 3.3: AUTO-INCLINE 5-SECOND ADVANCE SAFETY WARNING OVERLAY */}
+      {inclineWarning && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92vw] animate-in zoom-in-95 duration-300 pointer-events-auto select-none">
+          <div className="bg-[#2C2621]/95 text-white backdrop-blur-xl rounded-3xl p-4 sm:p-5 border-2 border-[#D4AF37] shadow-2xl space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl sm:text-2xl animate-bounce">⚠️</span>
+                <div>
+                  <div className="text-[10px] font-black tracking-wider uppercase text-[#D4AF37]">
+                    Safety Protocol • ระบบเตือนความปลอดภัย
+                  </div>
+                  <h4 className="text-sm sm:text-base font-black text-white">
+                    กำลังจะปรับความชันตามภูมิประเทศ
+                  </h4>
+                </div>
+              </div>
+
+              {/* Countdown circle badge */}
+              <div className="w-10 h-10 rounded-full border-2 border-[#D4AF37] bg-[#D4AF37]/20 flex items-center justify-center font-mono font-black text-lg text-[#D4AF37] shrink-0 animate-pulse">
+                {inclineWarning.countdown}s
+              </div>
+            </div>
+
+            {/* Incline Details */}
+            <div className="bg-white/10 rounded-2xl p-3 flex items-center justify-between border border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{inclineWarning.segment.icon}</span>
+                <div>
+                  <div className="text-xs font-bold text-white">{inclineWarning.segment.name}</div>
+                  <div className="text-[10px] text-[#D5CEC5]">ความชันลู่วิ่งจะยกขึ้นสู่</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-mono font-black text-[#D4AF37]">
+                  ระดับ {inclineWarning.segment.incline}
+                </div>
+                <div className="text-[9px] text-[#A89F91]">
+                  +{(inclineWarning.segment.incline * 0.8).toFixed(1)}%
+                </div>
+              </div>
+            </div>
+
+            {/* Big Action Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCancelAutoIncline}
+                className="flex-1 py-3 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shadow-md"
+              >
+                <span>✕</span>
+                <span>ยกเลิกการปรับชัน (Cancel)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAcceptAutoInclineImmediately}
+                className="py-3 px-4 rounded-2xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+              >
+                <span>✓ ปรับทันที</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CELEBRATORY STAGE TRANSITION BANNER (Phase 5) */}
       {activeStageTransition && (

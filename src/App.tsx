@@ -532,6 +532,10 @@ export const App: React.FC = () => {
 
       const progTitle = workoutState.program?.title || reasonTitle || 'Free Running Session';
 
+      const computedAvgIncline = metrics.distanceMeters > 50 && metrics.elevationGainMeters > 0
+        ? Number(((metrics.elevationGainMeters / metrics.distanceMeters) * 100).toFixed(1))
+        : (metrics.inclineLevel > 0 ? metrics.inclineLevel : maxInclineRef.current);
+
       const record: WorkoutRecord = {
         id: `wo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         created_at: new Date().toISOString(),
@@ -542,7 +546,7 @@ export const App: React.FC = () => {
         elevation_gain_meters: Number(metrics.elevationGainMeters.toFixed(1)),
         avg_speed_kmh: Number(avgSpeed.toFixed(1)),
         max_speed_kmh: Number(Math.max(metrics.speedKmh, maxSpeedRef.current).toFixed(1)),
-        avg_incline: metrics.inclineLevel,
+        avg_incline: computedAvgIncline,
         max_incline: Math.max(metrics.inclineLevel, maxInclineRef.current),
         fat_grams_burned: Number(metrics.fatGramsBurned.toFixed(1)),
         user_id: activeProfile.id,

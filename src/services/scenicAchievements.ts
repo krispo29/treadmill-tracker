@@ -533,3 +533,173 @@ export function playTrainWhistleTone(audioCtx?: AudioContext | null): void {
     console.warn('Could not play train whistle:', err);
   }
 }
+
+// ==========================================
+// TICKET 3.2: OMIYAGE LOCAL SOUVENIR CATALOG & STORAGE
+// ==========================================
+
+export interface OmiyageItem {
+  id: string;
+  name: string;
+  nameJp: string;
+  region: 'kamakura' | 'kyoto' | 'hokkaido' | 'tokyo';
+  regionName: string;
+  emoji: string;
+  description: string;
+  rarity: 'common' | 'rare' | 'legendary';
+}
+
+export const OMIYAGE_CATALOG: OmiyageItem[] = [
+  // Kamakura & Shonan Coast
+  {
+    id: 'omiyage_hato',
+    name: 'คุกกี้นกพิราบ ฮะโตะซาเบล',
+    nameJp: '鳩サブレー',
+    region: 'kamakura',
+    regionName: 'คามาคุระ & ชายฝั่งโชนัน',
+    emoji: '🕊️',
+    description: 'บิสกิตเนยรูปนกพิราบชื่อดังแห่งศาลเจ้าสึรุงะโอกะ อบหอมกรุ่นเนยสด',
+    rarity: 'common',
+  },
+  {
+    id: 'omiyage_enoden_pass',
+    name: 'ตั๋วรถไฟไม้โบราณ Enoden 1-Day Pass',
+    nameJp: '江ノ電 1日乗車券',
+    region: 'kamakura',
+    regionName: 'คามาคุระ & ชายฝั่งโชนัน',
+    emoji: '🎫',
+    description: 'ตั๋วไม้ที่ระลึกสำหรับนั่งรถไฟสายเลียบหาดมองเห็นวิวฟูจิซัง',
+    rarity: 'rare',
+  },
+  {
+    id: 'omiyage_shirasu',
+    name: 'ข้าวหน้าปลาชิราสุริมหาด',
+    nameJp: '生しらす丼',
+    region: 'kamakura',
+    regionName: 'คามาคุระ & ชายฝั่งโชนัน',
+    emoji: '🐟',
+    description: 'ของเด็ดแห่งหาดโชนัน ปลาชิราสุสดใหม่ราดซอสโชยุขิงหอมสดชื่น',
+    rarity: 'common',
+  },
+
+  // Kyoto Arashiyama
+  {
+    id: 'omiyage_uji_matcha',
+    name: 'ผงชาเขียวอุจิมัทฉะพิธีชงชา',
+    nameJp: '宇治抹茶',
+    region: 'kyoto',
+    regionName: 'เกียวโต อาราชิยามะ',
+    emoji: '🍵',
+    description: 'มัทฉะแท้เกรดพรีเมียมจากเมืองอุจิ หอมละมุนเข้มข้น รสชาติแห่งประวัติศาสตร์',
+    rarity: 'common',
+  },
+  {
+    id: 'omiyage_bamboo_fan',
+    name: 'พัดสานไม้ไผ่อาราชิยามะ',
+    nameJp: '嵐山竹扇子',
+    region: 'kyoto',
+    regionName: 'เกียวโต อาราชิยามะ',
+    emoji: '🎋',
+    description: 'พัดพับโบราณทำจากไม้ไผ่ธรรมชาติในป่าไผ่ซากาโนะ ฝีมือช่างเกียวโต',
+    rarity: 'rare',
+  },
+  {
+    id: 'omiyage_kitsune_mask',
+    name: 'หน้ากากจิ้งจอกฟูชิมิอินาริ',
+    nameJp: '狐の面',
+    region: 'kyoto',
+    regionName: 'เกียวโต อาราชิยามะ',
+    emoji: '🦊',
+    description: 'หน้ากากจิ้งจอกสีขาวแต้มแดง พิทักษ์ความอุดมสมบูรณ์และชัยชนะ',
+    rarity: 'legendary',
+  },
+
+  // Hokkaido Biei
+  {
+    id: 'omiyage_hokkaido_milk',
+    name: 'นมสดขวดแก้วฟาร์มบิเอะ',
+    nameJp: '美瑛の丘の牛乳',
+    region: 'hokkaido',
+    regionName: 'ฮอกไกโด บิเอะ',
+    emoji: '🥛',
+    description: 'นมโคแท้ 100% หอมมัน เข้มข้นจากฟาร์มโคนมท่ามกลางทุ่งหญ้าและขุนเขา',
+    rarity: 'common',
+  },
+  {
+    id: 'omiyage_lavender_sachet',
+    name: 'ถุงหอมดอกลาเวนเดอร์ฟุราโน่',
+    nameJp: '富良野ラベンダー',
+    region: 'hokkaido',
+    regionName: 'ฮอกไกโด บิเอะ',
+    emoji: '🌸',
+    description: 'ดอกลาเวนเดอร์อบแห้งแท้ กลิ่นหอมผ่อนคลายช่วยให้จิตใจสงบ',
+    rarity: 'common',
+  },
+  {
+    id: 'omiyage_melon',
+    name: 'เมล่อนฮอกไกโดหวานฉ่ำ',
+    nameJp: '夕張メロン',
+    region: 'hokkaido',
+    regionName: 'ฮอกไกโด บิเอะ',
+    emoji: '🍈',
+    description: 'ราชาผลไม้แห่งแดนเหนือ เนื้อสีส้มหวานหอมสดชื่นละลายในปาก',
+    rarity: 'legendary',
+  },
+
+  // Neo-Tokyo Twilight
+  {
+    id: 'omiyage_tokyo_tower',
+    name: 'โมเดลหอคอยโตเกียวทาวเวอร์เรโทร',
+    nameJp: '東京タワー',
+    region: 'tokyo',
+    regionName: 'มหานครโตเกียว เรโทร',
+    emoji: '🗼',
+    description: 'โมเดลจำลองหอคอยสีส้มขาวสัญลักษณ์แห่งความหวังและแสงสียุคเรโทร',
+    rarity: 'rare',
+  },
+  {
+    id: 'omiyage_maneki_neko',
+    name: 'ตุ๊กตาแมวกวักทองคำนำโชค',
+    nameJp: '招き猫',
+    region: 'tokyo',
+    regionName: 'มหานครโตเกียว เรโทร',
+    emoji: '🐱',
+    description: 'แมวกวักยกอุ้งเท้าขวาเรียกลาภยศ พลังกาย และสุขภาพแข็งแรงแด่นักวิ่ง',
+    rarity: 'legendary',
+  },
+  {
+    id: 'omiyage_ramen_bowl',
+    name: 'ชามราเมนยาไตลายมังกรโบราณ',
+    nameJp: '屋台ラーメン丼',
+    region: 'tokyo',
+    regionName: 'มหานครโตเกียว เรโทร',
+    emoji: '🍜',
+    description: 'ชามเซรามิกขอบแดงสำหรับซดน้ำซุปทงคตสึร้อนๆ ยามค่ำคืนในชินจูกุ',
+    rarity: 'common',
+  },
+];
+
+export function getUnlockedOmiyageIds(profileId?: string): string[] {
+  try {
+    const safeId = profileId && profileId.trim().length > 0 ? profileId.trim() : 'default';
+    const key = `scenic_omiyage_profile_${safeId}_v1`;
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveUnlockedOmiyageId(profileId: string | undefined, omiyageId: string): string[] {
+  try {
+    const current = new Set(getUnlockedOmiyageIds(profileId));
+    current.add(omiyageId);
+    const updated = Array.from(current);
+    const safeId = profileId && profileId.trim().length > 0 ? profileId.trim() : 'default';
+    const key = `scenic_omiyage_profile_${safeId}_v1`;
+    localStorage.setItem(key, JSON.stringify(updated));
+    return updated;
+  } catch {
+    return [];
+  }
+}

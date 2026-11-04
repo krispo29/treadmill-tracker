@@ -519,6 +519,57 @@ class NeonDatabaseService {
     return true;
   }
 
+  public async updateWorkout(
+    id: string,
+    updates: Partial<WorkoutRecord>
+  ): Promise<WorkoutRecord | null> {
+    const workouts = await this.getWorkouts();
+    const workout = workouts.find((w) => w.id === id);
+    if (!workout) return null;
+
+    const updatedWorkout: WorkoutRecord = {
+      ...workout,
+      ...updates,
+      id: workout.id, // prevent id alteration
+    };
+
+    this.saveToLocal(updatedWorkout);
+
+    if (this.isConfigured()) {
+      try {
+        const sql = this.getClient();
+        await sql`
+          UPDATE treadmill_workouts
+          SET 
+            program_name = ${updatedWorkout.program_name},
+            duration_seconds = ${updatedWorkout.duration_seconds},
+            distance_meters = ${updatedWorkout.distance_meters},
+            calories_burned = ${updatedWorkout.calories_burned},
+            elevation_gain_meters = ${updatedWorkout.elevation_gain_meters},
+            avg_speed_kmh = ${updatedWorkout.avg_speed_kmh},
+            max_speed_kmh = ${updatedWorkout.max_speed_kmh},
+            avg_incline = ${updatedWorkout.avg_incline},
+            max_incline = ${updatedWorkout.max_incline},
+            fat_grams_burned = ${updatedWorkout.fat_grams_burned},
+            user_id = ${updatedWorkout.user_id},
+            user_name = ${updatedWorkout.user_name},
+            user_avatar = ${updatedWorkout.user_avatar},
+            user_weight_kg = ${updatedWorkout.user_weight_kg},
+            user_height_cm = ${updatedWorkout.user_height_cm},
+            user_age = ${updatedWorkout.user_age},
+            user_gender = ${updatedWorkout.user_gender},
+            user_bmi = ${updatedWorkout.user_bmi},
+            notes = ${updatedWorkout.notes || ''}
+          WHERE id = ${id};
+        `;
+      } catch (err) {
+        console.error('Failed to update workout in Neon:', err);
+      }
+    }
+
+    return updatedWorkout;
+  }
+
   public async updateWorkoutRunner(
     id: string,
     profile: UserProfile,

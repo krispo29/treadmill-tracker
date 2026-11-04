@@ -55,6 +55,7 @@ class TreadmillBluetoothService {
   private timerInterval: any = null;
   private simulationInterval: any = null;
   private userWeightKg: number = 70;
+  private lastTickTime: number = Date.now();
 
   constructor() {
     this.startMetricsTimer();
@@ -309,19 +310,39 @@ class TreadmillBluetoothService {
   }
 
   /**
+   * Starts Manual workout mode (No Bluetooth required, user controls speed/incline directly)
+   */
+  public startManualMode(initialSpeed: number = 3.0, initialIncline: number = 0): void {
+    if (this.simulationInterval) {
+      clearInterval(this.simulationInterval);
+      this.simulationInterval = null;
+    }
+    this.protocol = 'Simulation';
+    this.deviceName = 'โหมดวิ่งอิสระ (Manual Jog)';
+    this.updateStatus('connected', 'Simulation', this.deviceName);
+    this.metrics.speedKmh = initialSpeed;
+    this.metrics.inclineLevel = initialIncline;
+    this.addLog('SYS', 'Simulation', '', `เริ่มโหมดวิ่งอิสระ (Manual Jog) ที่ความเร็ว ${initialSpeed} km/h`);
+    if (this.onDataCallback) {
+      this.onDataCallback({ ...this.metrics });
+    }
+  }
+
+  /**
    * Start or Resume treadmill belt (Start at 3.0 km/h or custom speed)
    */
   public async startTreadmill(speedKmh: number = 3.0): Promise<boolean> {
     if (this.protocol === 'Simulation') {
       this.metrics.speedKmh = speedKmh;
-      this.addLog('TX', 'Simulation', '', `จำลองเริ่มเดินที่ ${speedKmh} km/h`);
+      this.addLog('TX', 'Simulation', '', `ปรับสปีดเริ่มเดินที่ ${speedKmh} km/h`);
       if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
       return true;
     }
 
     if (!this.controlChar) {
-      this.addLog('SYS', this.protocol, '', 'ไม่มี Control Point สำหรับส่งคำสั่งเริ่มหมุนลู่');
-      return false;
+      // Seamlessly start manual mode so standalone web/iPad users can jog without Bluetooth!
+      this.startManualMode(speedKmh);
+      return true;
     }
 
     try {
@@ -356,14 +377,12 @@ class TreadmillBluetoothService {
    * Stop treadmill belt
    */
   public async stopTreadmill(): Promise<boolean> {
-    if (this.protocol === 'Simulation') {
+    if (this.protocol === 'Simulation' || !this.controlChar) {
       this.metrics.speedKmh = 0;
-      this.addLog('TX', 'Simulation', '', 'จำลองหยุดลู่วิ่ง');
+      this.addLog('TX', 'Simulation', '', 'หยุดสายพานลู่วิ่ง');
       if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
       return true;
     }
-
-    if (!this.controlChar) return false;
 
     try {
       if (this.protocol === 'FTMS') {
@@ -388,16 +407,11 @@ class TreadmillBluetoothService {
   public async setSpeed(speedKmh: number): Promise<boolean> {
     const clamped = Math.min(Math.max(Number(speedKmh.toFixed(1)), 0), 16.0);
 
-    if (this.protocol === 'Simulation') {
+    if (this.protocol === 'Simulation' || !this.controlChar) {
       this.metrics.speedKmh = clamped;
-      this.addLog('TX', 'Simulation', '', `จำลองปรับความเร็วเป็น ${clamped} km/h`);
+      this.addLog('TX', 'Simulation', '', `ปรับความเร็วเป็น ${clamped} km/h`);
       if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
       return true;
-    }
-
-    if (!this.controlChar) {
-      this.addLog('SYS', this.protocol, '', 'ลู่วิ่งไม่อนุญาตให้ส่งคำสั่งควบคุม (โหมดอ่านอย่างเดียว)');
-      return false;
     }
 
     try {
@@ -448,16 +462,11 @@ class TreadmillBluetoothService {
   public async setIncline(inclineLevel: number): Promise<boolean> {
     const clamped = Math.min(Math.max(Math.round(inclineLevel), 0), 20);
 
-    if (this.protocol === 'Simulation') {
+    if (this.protocol === 'Simulation' || !this.controlChar) {
       this.metrics.inclineLevel = clamped;
-      this.addLog('TX', 'Simulation', '', `จำลองปรับความชันเป็นระดับ ${clamped}`);
+      this.addLog('TX', 'Simulation', '', `ปรับความชันเป็นระดับ ${clamped}`);
       if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
       return true;
-    }
-
-    if (!this.controlChar) {
-      this.addLog('SYS', this.protocol, '', 'ลู่วิ่งไม่อนุญาตให้ส่งคำสั่งควบคุม (โหมดอ่านอย่างเดียว)');
-      return false;
     }
 
     try {
@@ -470,14 +479,18 @@ class TreadmillBluetoothService {
         const rawIncline = clamped * 10;
         const buffer = new Uint8Array([0x03, rawIncline & 0xff, (rawIncline >> 8) & 0xff]);
         await this.writeControlData(buffer);
+        this.metrics.inclineLevel = clamped;
         this.addLog('TX', 'FTMS', this.buf2hex(buffer.buffer), `ส่งคำสั่งความชัน: ระดับ ${clamped}`);
+        if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
         return true;
       } else if (this.protocol === 'FitShow_FFF0') {
         // FitShow Incline Frame: 0x02 0x55 0x01 <level> <checksum> 0x03
         const checksum = (0x02 ^ 0x55 ^ 0x01 ^ clamped) & 0xff;
         const buffer = new Uint8Array([0x02, 0x55, 0x01, clamped, checksum, 0x03]);
         await this.writeControlData(buffer);
+        this.metrics.inclineLevel = clamped;
         this.addLog('TX', 'FitShow_FFF0', this.buf2hex(buffer.buffer), `ส่งคำสั่งความชัน: ระดับ ${clamped}`);
+        if (this.onDataCallback) this.onDataCallback({ ...this.metrics });
         return true;
       }
     } catch (err: any) {
@@ -499,6 +512,7 @@ class TreadmillBluetoothService {
   }
 
   public resetSession(): void {
+    this.lastTickTime = Date.now();
     this.metrics = {
       speedKmh: 0,
       inclineLevel: 0,
@@ -658,6 +672,11 @@ class TreadmillBluetoothService {
       offset += 1;
     }
 
+    // Metabolic Equivalent (bit 9, uint8 in 0.1 MET)
+    if (flags & (1 << 9)) {
+      offset += 1;
+    }
+
     // Elapsed Time (bit 10, uint16 in seconds)
     if (flags & (1 << 10)) {
       if (dataView.byteLength >= offset + 2) {
@@ -719,6 +738,12 @@ class TreadmillBluetoothService {
             this.metrics.inclineLevel = rawIncline;
           }
         }
+      } else if (cmd === 0x55) {
+        // Dedicated Incline command frame (0x02 0x55 0x01 <level> <checksum> 0x03)
+        const rawIncline = len >= 4 ? dataView.getUint8(3) : (len >= 3 ? dataView.getUint8(2) : 0);
+        if (rawIncline <= 20) {
+          this.metrics.inclineLevel = rawIncline;
+        }
       }
     }
 
@@ -729,56 +754,84 @@ class TreadmillBluetoothService {
   }
 
   /**
-   * Accumulates distance, calories, elevation gain, and elapsed time every 1 second
+   * Accumulates distance, calories, elevation gain, and elapsed time using wall-clock delta
+   * (Prevents time/metric loss when tab is backgrounded or screen sleeps)
    */
+  private handleVisibilityChange = (): void => {
+    if (typeof document !== 'undefined' && !document.hidden) {
+      this.tickMetrics();
+    }
+  };
+
+  private tickMetrics(): void {
+    const now = Date.now();
+    const deltaMs = now - this.lastTickTime;
+    this.lastTickTime = now;
+
+    // Safety guard: max single jump 300 seconds (5 min) to prevent crazy runaway if system clock jumped
+    const deltaSeconds = Math.min(Math.max(deltaMs / 1000, 0), 300);
+
+    // Only accumulate when treadmill belt is moving
+    if (this.metrics.speedKmh > 0.1 && (this.status === 'connected' || this.protocol === 'Simulation')) {
+      this.metrics.elapsedSeconds += deltaSeconds;
+
+      // Distance per second = speedKmh * 1000 / 3600
+      const distanceDeltaMeters = (this.metrics.speedKmh * 1000 / 3600) * deltaSeconds;
+      this.metrics.distanceMeters += distanceDeltaMeters;
+
+      // Elevation Gain Delta = distanceDelta * grade fraction
+      const grade = Math.min(this.metrics.inclineLevel, 20) / 100;
+      this.metrics.elevationGainMeters += distanceDeltaMeters * grade;
+
+      // ACSM Incline-adjusted Calorie Burn
+      const calPerSec = calculateAcsmCaloriesPerSecond(
+        this.metrics.speedKmh,
+        this.metrics.inclineLevel,
+        this.userWeightKg
+      );
+      this.metrics.caloriesBurned += calPerSec * deltaSeconds;
+
+      // Fat oxidized in grams
+      this.metrics.fatGramsBurned = calculateFatGramsBurned(
+        this.metrics.caloriesBurned,
+        this.metrics.speedKmh,
+        this.metrics.inclineLevel
+      );
+
+      // Pace
+      this.metrics.currentPaceSecPerKm = Math.round(3600 / this.metrics.speedKmh);
+
+      if (this.onDataCallback) {
+        this.onDataCallback({
+          ...this.metrics,
+          elapsedSeconds: Math.round(this.metrics.elapsedSeconds),
+        });
+      }
+
+      // Emit telemetry point every 3 seconds for charting
+      const roundedSec = Math.round(this.metrics.elapsedSeconds);
+      if (roundedSec % 3 === 0 && this.onTelemetryCallback) {
+        this.onTelemetryCallback({
+          second: roundedSec,
+          speed: this.metrics.speedKmh,
+          incline: this.metrics.inclineLevel,
+        });
+      }
+    }
+  }
+
   private startMetricsTimer(): void {
     if (this.timerInterval) clearInterval(this.timerInterval);
 
+    this.lastTickTime = Date.now();
     this.timerInterval = setInterval(() => {
-      // Only accumulate when treadmill belt is moving
-      if (this.metrics.speedKmh > 0.1 && (this.status === 'connected' || this.protocol === 'Simulation')) {
-        this.metrics.elapsedSeconds += 1;
-
-        // Distance per second = speedKmh * 1000 / 3600
-        const distanceDeltaMeters = (this.metrics.speedKmh * 1000) / 3600;
-        this.metrics.distanceMeters += distanceDeltaMeters;
-
-        // Elevation Gain Delta = distanceDelta * grade fraction
-        const grade = Math.min(this.metrics.inclineLevel, 20) / 100;
-        this.metrics.elevationGainMeters += distanceDeltaMeters * grade;
-
-        // ACSM Incline-adjusted Calorie Burn
-        const calPerSec = calculateAcsmCaloriesPerSecond(
-          this.metrics.speedKmh,
-          this.metrics.inclineLevel,
-          this.userWeightKg
-        );
-        this.metrics.caloriesBurned += calPerSec;
-
-        // Fat oxidized in grams
-        this.metrics.fatGramsBurned = calculateFatGramsBurned(
-          this.metrics.caloriesBurned,
-          this.metrics.speedKmh,
-          this.metrics.inclineLevel
-        );
-
-        // Pace
-        this.metrics.currentPaceSecPerKm = Math.round(3600 / this.metrics.speedKmh);
-
-        if (this.onDataCallback) {
-          this.onDataCallback({ ...this.metrics });
-        }
-
-        // Emit telemetry point every 3 seconds for charting
-        if (this.metrics.elapsedSeconds % 3 === 0 && this.onTelemetryCallback) {
-          this.onTelemetryCallback({
-            second: this.metrics.elapsedSeconds,
-            speed: this.metrics.speedKmh,
-            incline: this.metrics.inclineLevel,
-          });
-        }
-      }
+      this.tickMetrics();
     }, 1000);
+
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
   }
 
   private async requestWakeLock(): Promise<void> {
