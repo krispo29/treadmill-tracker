@@ -56,6 +56,7 @@ class TreadmillBluetoothService {
   private simulationInterval: any = null;
   private userWeightKg: number = 70;
   private lastTickTime: number = Date.now();
+  private sessionPacketLogs: PacketLog[] = [];
 
   constructor() {
     this.startMetricsTimer();
@@ -513,6 +514,7 @@ class TreadmillBluetoothService {
 
   public resetSession(): void {
     this.lastTickTime = Date.now();
+    this.sessionPacketLogs = [];
     this.metrics = {
       speedKmh: 0,
       inclineLevel: 0,
@@ -861,17 +863,33 @@ class TreadmillBluetoothService {
   }
 
   private addLog(direction: 'RX' | 'TX' | 'SYS', protocol: BluetoothProtocol, hex: string, decodedSummary?: string): void {
-    if (this.onLogCallback) {
-      const timestamp = new Date().toLocaleTimeString('th-TH', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      this.onLogCallback({
-        id: Math.random().toString(36).substring(2, 9),
-        timestamp,
-        direction,
-        protocol,
-        hex,
-        decodedSummary
-      });
+    const timestamp = new Date().toLocaleTimeString('th-TH', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const logItem: PacketLog = {
+      id: Math.random().toString(36).substring(2, 9),
+      timestamp,
+      direction,
+      protocol,
+      hex,
+      decodedSummary
+    };
+
+    // Keep session logs buffer for post-workout diagnostic & reverse-engineering analysis
+    this.sessionPacketLogs.push(logItem);
+    if (this.sessionPacketLogs.length > 5000) {
+      this.sessionPacketLogs.shift();
     }
+
+    if (this.onLogCallback) {
+      this.onLogCallback(logItem);
+    }
+  }
+
+  public getSessionPacketLogs(): PacketLog[] {
+    return [...this.sessionPacketLogs];
+  }
+
+  public clearSessionPacketLogs(): void {
+    this.sessionPacketLogs = [];
   }
 
   private buf2hex(buffer: ArrayBufferLike): string {

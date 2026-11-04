@@ -1,6 +1,6 @@
 import { neon, neonConfig } from '@neondatabase/serverless';
 import type { WorkoutRecord, DatabaseStats } from '../types/database';
-import type { UserProfile, WorkoutGoal } from '../types/treadmill';
+import type { UserProfile, WorkoutGoal, PacketLog } from '../types/treadmill';
 import type { WorkoutProgram } from '../types/workout';
 import { calculateAcsmCaloriesPerSecond, calculateFatGramsBurned } from './calculations';
 
@@ -159,6 +159,20 @@ class NeonDatabaseService {
         achievement_id TEXT NOT NULL,
         unlocked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         PRIMARY KEY (user_id, achievement_id)
+      );
+    `;
+
+    // Create treadmill_device_logs table in Neon for packet diagnostics and reverse-engineering
+    await sql`
+      CREATE TABLE IF NOT EXISTS treadmill_device_logs (
+        id TEXT PRIMARY KEY,
+        workout_id TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        user_name TEXT,
+        device_name TEXT,
+        protocol TEXT,
+        total_packets INTEGER NOT NULL DEFAULT 0,
+        raw_logs JSONB NOT NULL
       );
     `;
   }
@@ -721,6 +735,71 @@ class NeonDatabaseService {
     ]);
 
     return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  }
+
+  public async saveDeviceLogs(
+    workoutId: string,
+    userName: string,
+    deviceName: string,
+    protocol: string,
+    logs: PacketLog[]
+  ): Promise<boolean> {
+    if (!this.isConfigured() || logs.length === 0) return false;
+    try {
+      const sql = this.getClient();
+      await this.initSchema();
+      const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const logsJson = JSON.stringify(logs);
+
+      await sql`
+        INSERT INTO treadmill_device_logs (
+          id, workout_id, created_at, user_name, device_name, protocol, total_packets, raw_logs
+        ) VALUES (
+          ${id}, ${workoutId}, NOW(), ${userName}, ${deviceName}, ${protocol}, ${logs.length}, ${logsJson}::jsonb
+        );
+      `;
+      return true;
+    } catch (err) {
+      console.warn('Neon saveDeviceLogs error:', err);
+      return false;
+    }
+  }
+
+  public async getDeviceLogs(workoutId: string): Promise<PacketLog[]> {
+    if (!this.isConfigured()) return [];
+    try {
+      const sql = this.getClient();
+      await this.initSchema();
+      const rows = await sql`
+        SELECT raw_logs FROM treadmill_device_logs WHERE workout_id = ${workoutId} LIMIT 1;
+      `;
+      if (rows && rows.length > 0) {
+        return typeof rows[0].raw_logs === 'string'
+          ? JSON.parse(rows[0].raw_logs)
+          : rows[0].raw_logs;
+      }
+    } catch (err) {
+      console.warn('Neon getDeviceLogs error:', err);
+    }
+    return [];
+  }
+
+  public async getLatestDeviceLogs(limit: number = 3): Promise<any[]> {
+    if (!this.isConfigured()) return [];
+    try {
+      const sql = this.getClient();
+      await this.initSchema();
+      const rows = await sql`
+        SELECT id, workout_id, created_at, user_name, device_name, protocol, total_packets, raw_logs
+        FROM treadmill_device_logs
+        ORDER BY created_at DESC
+        LIMIT ${limit};
+      `;
+      return rows;
+    } catch (err) {
+      console.warn('Neon getLatestDeviceLogs error:', err);
+      return [];
+    }
   }
 
   private saveToLocal(workout: WorkoutRecord) {

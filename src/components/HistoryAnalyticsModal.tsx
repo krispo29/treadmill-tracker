@@ -15,7 +15,8 @@ import {
   ChevronDown,
   UserCheck,
   Pencil,
-  Check
+  Check,
+  Terminal
 } from 'lucide-react';
 import type { WorkoutRecord, DatabaseStats } from '../types/database';
 import type { UserProfile } from '../types/treadmill';
@@ -118,6 +119,33 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
       setEditingWorkout(null);
     }
     setIsSavingEdit(false);
+  };
+
+  const [downloadingLogId, setDownloadingLogId] = useState<string | null>(null);
+
+  const handleDownloadLogs = async (workoutId: string, userName: string) => {
+    setDownloadingLogId(workoutId);
+    try {
+      const logs = await neonDatabase.getDeviceLogs(workoutId);
+      if (!logs || logs.length === 0) {
+        alert('ยังไม่มีบันทึก Bluetooth Raw Packet Log สำหรับรอบนี้ (ระบบจะเริ่มบันทึกอัตโนมัติตั้งแต่รอบวิ่งถัดไป)');
+        return;
+      }
+      const jsonStr = JSON.stringify(logs, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `treadmill-packet-log-${(userName || 'run').toLowerCase()}-${workoutId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('ไม่สามารถดึงข้อมูล Logs ได้');
+    } finally {
+      setDownloadingLogId(null);
+    }
   };
 
   const loadWorkouts = async () => {
@@ -448,6 +476,15 @@ export const HistoryAnalyticsModal: React.FC<HistoryAnalyticsModalProps> = ({
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Strava GPX</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDownloadLogs(w.id, w.user_name || 'user')}
+                    disabled={downloadingLogId === w.id}
+                    className="p-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#EAF2EC] text-[#5A5047] hover:text-[#52796F] border border-[#EDE6DC] transition-colors cursor-pointer disabled:opacity-50"
+                    title="ดาวน์โหลด Bluetooth Packet Logs ของรอบนี้ (.json)"
+                  >
+                    <Terminal className="w-4 h-4" />
                   </button>
 
                   <button

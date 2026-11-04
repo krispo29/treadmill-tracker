@@ -20,7 +20,8 @@ import type {
   TelemetryPoint, 
   TreadmillMetrics, 
   WorkoutGoal,
-  UserProfile
+  UserProfile,
+  PacketLog
 } from './types/treadmill';
 import type { WorkoutProgram, WorkoutState, WorkoutStep } from './types/workout';
 import type { WorkoutRecord } from './types/database';
@@ -45,6 +46,7 @@ import { ProfileManagerModal } from './components/ProfileManagerModal';
 import { GiantRunningHud } from './components/GiantRunningHud';
 import { ScenicJourneyModal } from './components/ScenicJourneyModal';
 import { WorkoutRecapModal } from './components/WorkoutRecapModal';
+import { DiagnosticDrawer } from './components/DiagnosticDrawer';
 
 export const App: React.FC = () => {
   const [metrics, setMetrics] = useState<TreadmillMetrics>({
@@ -74,6 +76,7 @@ export const App: React.FC = () => {
   const [compactMode, setCompactMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [packetLogs, setPacketLogs] = useState<PacketLog[]>([]);
   const [bluetoothError, setBluetoothError] = useState<{
     code: string;
     title: string;
@@ -226,7 +229,9 @@ export const App: React.FC = () => {
         setProtocol(newProtocol);
         if (name) setDeviceName(name);
       },
-      () => {}, // packet logs not needed in UI
+      (newLog) => {
+        setPacketLogs((prev) => [...prev.slice(-300), newLog]);
+      },
       (point) => {
         setTelemetry((prev) => [...prev.slice(-150), point]); // Keep last 150 points for chart
       }
@@ -560,6 +565,22 @@ export const App: React.FC = () => {
       };
 
       await neonDatabase.saveWorkout(record);
+
+      // Auto-save full Bluetooth diagnostic packet logs to Neon DB for developer review
+      const sessionPacketLogs = bluetoothService.getSessionPacketLogs();
+      if (sessionPacketLogs.length > 0) {
+        neonDatabase.saveDeviceLogs(
+          record.id,
+          activeProfile.name,
+          deviceName || 'FitShow Treadmill',
+          protocol,
+          sessionPacketLogs
+        ).then(() => {
+          console.log(`📦 Auto-saved ${sessionPacketLogs.length} Bluetooth packet logs to Neon DB.`);
+        }).catch(err => {
+          console.warn('Auto log save error:', err);
+        });
+      }
 
       // Open Post-Workout Reward Celebration Recap Modal (Phase 3)
       setLatestSavedRecord(record);
@@ -1001,6 +1022,15 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Real-time Bluetooth Packet Inspector & Diagnostics Drawer */}
+      <DiagnosticDrawer
+        logs={packetLogs}
+        onClearLogs={() => {
+          setPacketLogs([]);
+          bluetoothService.clearSessionPacketLogs();
+        }}
+      />
     </div>
   );
 };
