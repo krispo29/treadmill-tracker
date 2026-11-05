@@ -621,6 +621,27 @@ class TreadmillBluetoothService {
         const d2 = dataView.getUint8(offset + 2);
         const dist = d0 | (d1 << 8) | (d2 << 16);
         if (dist > 0) {
+          // If hardware distance jumped ahead (e.g. tablet was in background / screen locked)
+          // Catch up elevation gain & calories using the actual distance traveled on incline!
+          const distJump = dist - this.metrics.distanceMeters;
+          if (distJump > 10 && this.metrics.distanceMeters > 0) {
+            const grade = Math.min(this.metrics.inclineLevel, 20) / 100;
+            this.metrics.elevationGainMeters += distJump * grade;
+
+            const effectiveSpeed = this.metrics.speedKmh > 0.5 ? this.metrics.speedKmh : 4.5;
+            const jumpedSeconds = (distJump / 1000) / (effectiveSpeed / 3600);
+            const calPerSec = calculateAcsmCaloriesPerSecond(
+              effectiveSpeed,
+              this.metrics.inclineLevel,
+              this.userWeightKg
+            );
+            this.metrics.caloriesBurned += calPerSec * jumpedSeconds;
+            this.metrics.fatGramsBurned = calculateFatGramsBurned(
+              this.metrics.caloriesBurned,
+              effectiveSpeed,
+              this.metrics.inclineLevel
+            );
+          }
           this.metrics.distanceMeters = dist;
         }
       }
@@ -685,6 +706,27 @@ class TreadmillBluetoothService {
         const timeSec = dataView.getUint16(offset, true);
         if (timeSec > 0) {
           this.metrics.elapsedSeconds = timeSec;
+        }
+      }
+      offset += 2;
+    }
+
+    // Remaining Time (bit 11, uint16 in seconds)
+    if (flags & (1 << 11)) {
+      offset += 2;
+    }
+
+    // Force on Belt and Power Output (bit 12, 4 bytes)
+    if (flags & (1 << 12)) {
+      offset += 4;
+    }
+
+    // Stride Count / Steps (bit 13, uint16)
+    if (flags & (1 << 13)) {
+      if (dataView.byteLength >= offset + 2) {
+        const strides = dataView.getUint16(offset, true);
+        if (strides > 0) {
+          this.metrics.cadence = strides;
         }
       }
       offset += 2;
@@ -770,8 +812,8 @@ class TreadmillBluetoothService {
     const deltaMs = now - this.lastTickTime;
     this.lastTickTime = now;
 
-    // Safety guard: max single jump 300 seconds (5 min) to prevent crazy runaway if system clock jumped
-    const deltaSeconds = Math.min(Math.max(deltaMs / 1000, 0), 300);
+    // Safety guard: max single jump 3600 seconds (1 hour) to handle mobile screen wake-up safely
+    const deltaSeconds = Math.min(Math.max(deltaMs / 1000, 0), 3600);
 
     // Only accumulate when treadmill belt is moving
     if (this.metrics.speedKmh > 0.1 && (this.status === 'connected' || this.protocol === 'Simulation')) {
