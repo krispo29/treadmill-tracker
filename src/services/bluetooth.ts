@@ -56,6 +56,7 @@ class TreadmillBluetoothService {
   private simulationInterval: any = null;
   private userWeightKg: number = 70;
   private lastTickTime: number = Date.now();
+  private lastPacketTimestamp: number = 0;
   private sessionPacketLogs: PacketLog[] = [];
 
   constructor() {
@@ -182,6 +183,18 @@ class TreadmillBluetoothService {
           this.addLog('SYS', 'FTMS', '', `ไม่พบ Control Point 0x2AD9: ${cpErr.message}`);
         }
 
+        // Try getting FTMS Machine Status (0x2ADA) to detect physical Stop/Pause/Safety Key
+        try {
+          const statusChar = await ftmsService.getCharacteristic(UUID_FTMS_STATUS);
+          await statusChar.startNotifications();
+          statusChar.addEventListener('characteristicvaluechanged', (e: any) => {
+            this.handleFtmsMachineStatus(e.target.value);
+          });
+          this.addLog('SYS', 'FTMS', '', 'เปิดรับสถานะเครื่องลู่วิ่ง (0x2ADA Machine Status)');
+        } catch (statusErr: any) {
+          console.log('Optional 0x2ADA status characteristic not available:', statusErr);
+        }
+
         serviceConnected = true;
       } catch (err: any) {
         this.addLog('SYS', 'Unknown', '', `ไม่พบ FTMS กำลังลอง FitShow Service (0xFFF0)...: ${err.message}`);
@@ -291,6 +304,34 @@ class TreadmillBluetoothService {
   }
 
   /**
+   * Handle FTMS Machine Status notifications (0x2ADA)
+   * Detects console Stop/Pause, Safety Key release, and reset events.
+   */
+  private handleFtmsMachineStatus(dataView: DataView) {
+    if (dataView.byteLength < 1) return;
+    const opcode = dataView.getUint8(0);
+    const hex = this.buf2hex(dataView.buffer);
+    this.lastPacketTimestamp = Date.now();
+
+    const statusNames: Record<number, string> = {
+      0x01: 'Reset',
+      0x02: 'Stopped or Paused by user',
+      0x03: 'Stopped by Safety Key',
+      0x04: 'Started or Resumed by user',
+    };
+    const sName = statusNames[opcode] || `Status 0x${opcode.toString(16)}`;
+    this.addLog('RX', 'FTMS', hex, `สถานะเครื่องลู่วิ่ง (Machine Status): ${sName}`);
+
+    // If stopped, reset, or safety key pulled: immediately halt metrics accumulation
+    if (opcode === 0x01 || opcode === 0x02 || opcode === 0x03) {
+      this.metrics.speedKmh = 0;
+      if (this.onDataCallback) {
+        this.onDataCallback({ ...this.metrics, speedKmh: 0 });
+      }
+    }
+  }
+
+  /**
    * Low-level helper to write data to control characteristic with response fallback
    */
   private async writeControlData(buffer: Uint8Array): Promise<void> {
@@ -389,11 +430,17 @@ class TreadmillBluetoothService {
       if (this.protocol === 'FTMS') {
         this.addLog('TX', 'FTMS', '08 01', 'ส่งคำสั่งหยุดลู่ (Stop: 0x08 0x01)...');
         await this.writeControlData(new Uint8Array([0x08, 0x01]));
+        // Immediately halt metrics accumulation so the timer stops ticking
+        this.metrics.speedKmh = 0;
+        if (this.onDataCallback) this.onDataCallback({ ...this.metrics, speedKmh: 0 });
         return true;
       } else if (this.protocol === 'FitShow_FFF0') {
         const stopBuffer = new Uint8Array([0x02, 0x53, 0x01, 0x02, 0x52, 0x03]);
         await this.writeControlData(stopBuffer);
         this.addLog('TX', 'FitShow_FFF0', this.buf2hex(stopBuffer.buffer), 'ส่งคำสั่งหยุดลู่ FitShow');
+        // Immediately halt metrics accumulation so the timer stops ticking
+        this.metrics.speedKmh = 0;
+        if (this.onDataCallback) this.onDataCallback({ ...this.metrics, speedKmh: 0 });
         return true;
       }
     } catch (err: any) {
@@ -514,6 +561,7 @@ class TreadmillBluetoothService {
 
   public resetSession(): void {
     this.lastTickTime = Date.now();
+    this.lastPacketTimestamp = 0;
     this.sessionPacketLogs = [];
     this.metrics = {
       speedKmh: 0,
@@ -590,6 +638,7 @@ class TreadmillBluetoothService {
   private parseFTMSPacket(dataView: DataView): void {
     const hex = this.buf2hex(dataView.buffer);
     if (dataView.byteLength < 2) return;
+    this.lastPacketTimestamp = Date.now();
 
     const flags = dataView.getUint16(0, true);
     let offset = 2;
@@ -760,6 +809,7 @@ class TreadmillBluetoothService {
       this.addLog('RX', 'FitShow_FFF0', hex, 'Packet สั้นเกินไป');
       return;
     }
+    this.lastPacketTimestamp = Date.now();
 
     const header = dataView.getUint8(0);
 
@@ -811,6 +861,24 @@ class TreadmillBluetoothService {
     const now = Date.now();
     const deltaMs = now - this.lastTickTime;
     this.lastTickTime = now;
+
+    // Inactivity Watchdog: If treadmill was moving but no packet received for > 4.5 seconds
+    // (e.g. user pressed physical Stop on machine console or safety clip was pulled),
+    // halt speed to stop timer from running away and allow auto-save to trigger cleanly.
+    if (
+      this.status === 'connected' &&
+      this.protocol !== 'Simulation' &&
+      this.metrics.speedKmh > 0.1 &&
+      this.lastPacketTimestamp > 0 &&
+      (now - this.lastPacketTimestamp > 4500)
+    ) {
+      this.metrics.speedKmh = 0;
+      this.addLog('SYS', this.protocol, '', 'ไม่ได้รับสัญญาณจากลู่วิ่งเกิน 4.5 วินาที (สายพานหยุด) ปรับความเร็วเป็น 0 เพื่อหยุดเวลาอัตโนมัติ');
+      if (this.onDataCallback) {
+        this.onDataCallback({ ...this.metrics, speedKmh: 0 });
+      }
+      return;
+    }
 
     // Safety guard: max single jump 3600 seconds (1 hour) to handle mobile screen wake-up safely
     const deltaSeconds = Math.min(Math.max(deltaMs / 1000, 0), 3600);

@@ -429,10 +429,8 @@ export const App: React.FC = () => {
 
   const handleStopTreadmill = async () => {
     await bluetoothService.stopTreadmill();
-    // Auto-save immediately if already stopped (e.g. simulation or belt already halted).
-    // If belt is still decelerating (speed > 0.1), let the telemetry callback (speed <= 0.05)
-    // auto-save once the belt comes to a complete rest with full distance and time.
-    if (metrics.speedKmh <= 0.1 && !hasSavedCurrentSessionRef.current && (metrics.elapsedSeconds >= 10 || metrics.distanceMeters >= 20)) {
+    // Auto-save immediately upon stopping treadmill if session has meaningful data
+    if (!hasSavedCurrentSessionRef.current && (metrics.elapsedSeconds >= 10 || metrics.distanceMeters >= 20)) {
       await saveSessionRecord('วิ่งจบเซสชั่น (Auto-saved)');
     }
   };
