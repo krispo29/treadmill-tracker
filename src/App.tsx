@@ -88,6 +88,7 @@ export const App: React.FC = () => {
   const maxInclineRef = useRef<number>(0);
   const wasRunningRef = useRef<boolean>(false);
   const autoSaveDebounceRef = useRef<boolean>(false);
+  const stopConfirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef<boolean>(false);
   const hasSavedCurrentSessionRef = useRef<boolean>(false);
   const lastSavedWorkoutRef = useRef<{ timestamp: number; distance: number; duration: number }>({
@@ -208,19 +209,31 @@ export const App: React.FC = () => {
         if (newMetrics.speedKmh > maxSpeedRef.current) maxSpeedRef.current = newMetrics.speedKmh;
         if (newMetrics.inclineLevel > maxInclineRef.current) maxInclineRef.current = newMetrics.inclineLevel;
 
-        // Auto-detect when belt stops running (Phase 3)
-        if (newMetrics.speedKmh > 0.5) {
-          wasRunningRef.current = true;
-          // Only reset saved status if starting a fresh session from zero
-          if (newMetrics.elapsedSeconds <= 3) {
-            hasSavedCurrentSessionRef.current = false;
-            autoSaveDebounceRef.current = false;
+        // Auto-detect when belt stops running (Phase 3) with 2.5s sustained-zero guard
+        // Prevents brief 0 km/h glitches or reconnect handshakes from popping up the Recap modal mid-run
+        if (newMetrics.speedKmh > 0.3) {
+          if (stopConfirmTimeoutRef.current) {
+            clearTimeout(stopConfirmTimeoutRef.current);
+            stopConfirmTimeoutRef.current = null;
+          }
+          if (newMetrics.speedKmh > 0.5) {
+            wasRunningRef.current = true;
+            // Only reset saved status if starting a fresh session from zero
+            if (newMetrics.elapsedSeconds <= 3) {
+              hasSavedCurrentSessionRef.current = false;
+              autoSaveDebounceRef.current = false;
+            }
           }
         } else if (newMetrics.speedKmh <= 0.05 && wasRunningRef.current) {
-          wasRunningRef.current = false;
-          if (!hasSavedCurrentSessionRef.current && !autoSaveDebounceRef.current && (newMetrics.elapsedSeconds >= 15 || newMetrics.distanceMeters >= 30)) {
-            autoSaveDebounceRef.current = true;
-            saveSessionRef.current('วิ่งจบเซสชั่น (Auto-saved)');
+          if (!stopConfirmTimeoutRef.current && !hasSavedCurrentSessionRef.current && !autoSaveDebounceRef.current && (newMetrics.elapsedSeconds >= 15 || newMetrics.distanceMeters >= 30)) {
+            stopConfirmTimeoutRef.current = setTimeout(() => {
+              stopConfirmTimeoutRef.current = null;
+              wasRunningRef.current = false;
+              if (!hasSavedCurrentSessionRef.current && !autoSaveDebounceRef.current) {
+                autoSaveDebounceRef.current = true;
+                saveSessionRef.current('วิ่งจบเซสชั่น (Auto-saved)');
+              }
+            }, 2500);
           }
         }
       },
@@ -339,6 +352,10 @@ export const App: React.FC = () => {
   };
 
   const resetAfterWorkout = () => {
+    if (stopConfirmTimeoutRef.current) {
+      clearTimeout(stopConfirmTimeoutRef.current);
+      stopConfirmTimeoutRef.current = null;
+    }
     bluetoothService.resetSession();
     setTelemetry([]);
     maxSpeedRef.current = 0;
@@ -428,6 +445,11 @@ export const App: React.FC = () => {
   };
 
   const handleStopTreadmill = async () => {
+    if (stopConfirmTimeoutRef.current) {
+      clearTimeout(stopConfirmTimeoutRef.current);
+      stopConfirmTimeoutRef.current = null;
+    }
+    wasRunningRef.current = false;
     await bluetoothService.stopTreadmill();
     // Auto-save immediately upon stopping treadmill if session has meaningful data
     if (!hasSavedCurrentSessionRef.current && (metrics.elapsedSeconds >= 10 || metrics.distanceMeters >= 20)) {

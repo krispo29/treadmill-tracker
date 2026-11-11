@@ -56,8 +56,6 @@ class TreadmillBluetoothService {
   private simulationInterval: any = null;
   private userWeightKg: number = 70;
   private lastTickTime: number = Date.now();
-  private lastPacketTimestamp: number = 0;
-  private silentForegroundTicks: number = 0;
   private sessionPacketLogs: PacketLog[] = [];
 
   constructor() {
@@ -311,21 +309,21 @@ class TreadmillBluetoothService {
   private handleFtmsMachineStatus(dataView: DataView) {
     if (dataView.byteLength < 1) return;
     const opcode = dataView.getUint8(0);
+    const param = dataView.byteLength >= 2 ? dataView.getUint8(1) : 0x01;
     const hex = this.buf2hex(dataView.buffer);
-    this.lastPacketTimestamp = Date.now();
-    this.silentForegroundTicks = 0;
 
     const statusNames: Record<number, string> = {
       0x01: 'Reset',
-      0x02: 'Stopped or Paused by user',
+      0x02: param === 0x02 ? 'Paused by user' : 'Stopped by user',
       0x03: 'Stopped by Safety Key',
       0x04: 'Started or Resumed by user',
     };
     const sName = statusNames[opcode] || `Status 0x${opcode.toString(16)}`;
     this.addLog('RX', 'FTMS', hex, `สถานะเครื่องลู่วิ่ง (Machine Status): ${sName}`);
 
-    // If stopped, reset, or safety key pulled: immediately halt metrics accumulation
-    if (opcode === 0x01 || opcode === 0x02 || opcode === 0x03) {
+    // Only halt speed on actual Stop (0x02 param != 0x02) or Safety Key (0x03).
+    // Do NOT halt on initial Reset (0x01) or Pause (0x02 param 0x02) to prevent unwanted Recap popup.
+    if (opcode === 0x03 || (opcode === 0x02 && param !== 0x02)) {
       this.metrics.speedKmh = 0;
       if (this.onDataCallback) {
         this.onDataCallback({ ...this.metrics, speedKmh: 0 });
@@ -563,8 +561,6 @@ class TreadmillBluetoothService {
 
   public resetSession(): void {
     this.lastTickTime = Date.now();
-    this.lastPacketTimestamp = 0;
-    this.silentForegroundTicks = 0;
     this.sessionPacketLogs = [];
     this.metrics = {
       speedKmh: 0,
@@ -641,8 +637,7 @@ class TreadmillBluetoothService {
   private parseFTMSPacket(dataView: DataView): void {
     const hex = this.buf2hex(dataView.buffer);
     if (dataView.byteLength < 2) return;
-    this.lastPacketTimestamp = Date.now();
-    this.silentForegroundTicks = 0;
+
 
     const flags = dataView.getUint16(0, true);
     let offset = 2;
@@ -808,8 +803,7 @@ class TreadmillBluetoothService {
       this.addLog('RX', 'FitShow_FFF0', hex, 'Packet สั้นเกินไป');
       return;
     }
-    this.lastPacketTimestamp = Date.now();
-    this.silentForegroundTicks = 0;
+
 
     const header = dataView.getUint8(0);
 
@@ -853,9 +847,6 @@ class TreadmillBluetoothService {
    */
   private handleVisibilityChange = (): void => {
     if (typeof document !== 'undefined' && !document.hidden) {
-      // Give BLE notifications a fresh grace period upon screen wake-up
-      this.silentForegroundTicks = 0;
-      this.lastPacketTimestamp = Date.now();
       this.tickMetrics();
     }
   };
@@ -864,34 +855,6 @@ class TreadmillBluetoothService {
     const now = Date.now();
     const deltaMs = now - this.lastTickTime;
     this.lastTickTime = now;
-
-    const isForeground = typeof document === 'undefined' || !document.hidden;
-
-    // Foreground-only Inactivity Watchdog:
-    // On iOS/iPadOS (Bluefy), locking the screen or backgrounding suspends BLE notifications.
-    // Only count silence when the app is actively in the foreground AND JS timers are running normally (deltaMs < 2500).
-    if (
-      this.status === 'connected' &&
-      this.protocol !== 'Simulation' &&
-      this.metrics.speedKmh > 0.1 &&
-      isForeground &&
-      deltaMs < 2500 &&
-      this.lastPacketTimestamp > 0 &&
-      (now - this.lastPacketTimestamp > 2000)
-    ) {
-      this.silentForegroundTicks += 1;
-      if (this.silentForegroundTicks >= 10) {
-        this.silentForegroundTicks = 0;
-        this.metrics.speedKmh = 0;
-        this.addLog('SYS', this.protocol, '', 'ไม่ได้รับสัญญาณจากลู่วิ่งขณะเปิดหน้าจอเกิน 10 วินาที (สายพานหยุด) ปรับความเร็วเป็น 0 เพื่อหยุดเวลาอัตโนมัติ');
-        if (this.onDataCallback) {
-          this.onDataCallback({ ...this.metrics, speedKmh: 0 });
-        }
-        return;
-      }
-    } else {
-      this.silentForegroundTicks = 0;
-    }
 
     // Safety guard: max single jump 3600 seconds (1 hour) to handle mobile screen wake-up safely
     const deltaSeconds = Math.min(Math.max(deltaMs / 1000, 0), 3600);
