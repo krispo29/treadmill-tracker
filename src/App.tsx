@@ -950,7 +950,9 @@ export const App: React.FC = () => {
         record={latestSavedRecord}
         onClose={() => {
           setIsRecapModalOpen(false);
-          resetAfterWorkout();
+          if (metrics.speedKmh <= 0.1) {
+            resetAfterWorkout();
+          }
         }}
         onViewHistory={() => {
           setIsRecapModalOpen(false);

@@ -57,6 +57,7 @@ class TreadmillBluetoothService {
   private userWeightKg: number = 70;
   private lastTickTime: number = Date.now();
   private lastPacketTimestamp: number = 0;
+  private silentForegroundTicks: number = 0;
   private sessionPacketLogs: PacketLog[] = [];
 
   constructor() {
@@ -312,6 +313,7 @@ class TreadmillBluetoothService {
     const opcode = dataView.getUint8(0);
     const hex = this.buf2hex(dataView.buffer);
     this.lastPacketTimestamp = Date.now();
+    this.silentForegroundTicks = 0;
 
     const statusNames: Record<number, string> = {
       0x01: 'Reset',
@@ -562,6 +564,7 @@ class TreadmillBluetoothService {
   public resetSession(): void {
     this.lastTickTime = Date.now();
     this.lastPacketTimestamp = 0;
+    this.silentForegroundTicks = 0;
     this.sessionPacketLogs = [];
     this.metrics = {
       speedKmh: 0,
@@ -639,6 +642,7 @@ class TreadmillBluetoothService {
     const hex = this.buf2hex(dataView.buffer);
     if (dataView.byteLength < 2) return;
     this.lastPacketTimestamp = Date.now();
+    this.silentForegroundTicks = 0;
 
     const flags = dataView.getUint16(0, true);
     let offset = 2;
@@ -662,42 +666,19 @@ class TreadmillBluetoothService {
       offset += 2;
     }
 
-    // Total Distance (bit 2, uint24 in meters)
+    // Total Distance (bit 2, uint24 in meters) — defer jump catch-up until incline is parsed below
+    let parsedDist: number | null = null;
     if (flags & (1 << 2)) {
       if (dataView.byteLength >= offset + 3) {
         const d0 = dataView.getUint8(offset);
         const d1 = dataView.getUint8(offset + 1);
         const d2 = dataView.getUint8(offset + 2);
-        const dist = d0 | (d1 << 8) | (d2 << 16);
-        if (dist > 0) {
-          // If hardware distance jumped ahead (e.g. tablet was in background / screen locked)
-          // Catch up elevation gain & calories using the actual distance traveled on incline!
-          const distJump = dist - this.metrics.distanceMeters;
-          if (distJump > 10 && this.metrics.distanceMeters > 0) {
-            const grade = Math.min(this.metrics.inclineLevel, 20) / 100;
-            this.metrics.elevationGainMeters += distJump * grade;
-
-            const effectiveSpeed = this.metrics.speedKmh > 0.5 ? this.metrics.speedKmh : 4.5;
-            const jumpedSeconds = (distJump / 1000) / (effectiveSpeed / 3600);
-            const calPerSec = calculateAcsmCaloriesPerSecond(
-              effectiveSpeed,
-              this.metrics.inclineLevel,
-              this.userWeightKg
-            );
-            this.metrics.caloriesBurned += calPerSec * jumpedSeconds;
-            this.metrics.fatGramsBurned = calculateFatGramsBurned(
-              this.metrics.caloriesBurned,
-              effectiveSpeed,
-              this.metrics.inclineLevel
-            );
-          }
-          this.metrics.distanceMeters = dist;
-        }
+        parsedDist = d0 | (d1 << 8) | (d2 << 16);
       }
       offset += 3;
     }
 
-    // Inclination and Ramp Angle (bit 3)
+    // Inclination and Ramp Angle (bit 3) — parse BEFORE distance catch-up so incline grade is current
     if (flags & (1 << 3)) {
       if (dataView.byteLength >= offset + 2) {
         // Incline in 0.1% percent
@@ -705,6 +686,30 @@ class TreadmillBluetoothService {
         this.metrics.inclineLevel = Math.max(0, Math.round(rawIncline / 10));
       }
       offset += 4; // 2 for incline + 2 for ramp angle
+    }
+
+    // Apply distance & catch up elevation gain + ACSM calories if hardware jumped ahead (e.g. screen locked / mid-run reconnect)
+    if (parsedDist !== null && parsedDist > 0) {
+      const distJump = parsedDist - this.metrics.distanceMeters;
+      if (distJump > 25) {
+        const grade = Math.min(this.metrics.inclineLevel, 20) / 100;
+        this.metrics.elevationGainMeters += distJump * grade;
+
+        const effectiveSpeed = this.metrics.speedKmh > 0.5 ? this.metrics.speedKmh : 4.5;
+        const jumpedSeconds = (distJump / 1000) / (effectiveSpeed / 3600);
+        const calPerSec = calculateAcsmCaloriesPerSecond(
+          effectiveSpeed,
+          this.metrics.inclineLevel,
+          this.userWeightKg
+        );
+        this.metrics.caloriesBurned += calPerSec * jumpedSeconds;
+        this.metrics.fatGramsBurned = calculateFatGramsBurned(
+          this.metrics.caloriesBurned,
+          effectiveSpeed,
+          this.metrics.inclineLevel
+        );
+      }
+      this.metrics.distanceMeters = parsedDist;
     }
 
     // Elevation Gain (bit 4)
@@ -722,14 +727,8 @@ class TreadmillBluetoothService {
       offset += 1;
     }
 
-    // Expended Energy (bit 7)
+    // Expended Energy (bit 7) — advance offset without overwriting scientific ACSM incline + weight calories
     if (flags & (1 << 7)) {
-      if (dataView.byteLength >= offset + 2) {
-        const energyKcal = dataView.getUint16(offset, true);
-        if (energyKcal > 0 && energyKcal < 65534) {
-          this.metrics.caloriesBurned = energyKcal;
-        }
-      }
       offset += 5; // 2 total + 2 per hour + 1 per min
     }
 
@@ -810,6 +809,7 @@ class TreadmillBluetoothService {
       return;
     }
     this.lastPacketTimestamp = Date.now();
+    this.silentForegroundTicks = 0;
 
     const header = dataView.getUint8(0);
 
@@ -853,6 +853,9 @@ class TreadmillBluetoothService {
    */
   private handleVisibilityChange = (): void => {
     if (typeof document !== 'undefined' && !document.hidden) {
+      // Give BLE notifications a fresh grace period upon screen wake-up
+      this.silentForegroundTicks = 0;
+      this.lastPacketTimestamp = Date.now();
       this.tickMetrics();
     }
   };
@@ -862,22 +865,32 @@ class TreadmillBluetoothService {
     const deltaMs = now - this.lastTickTime;
     this.lastTickTime = now;
 
-    // Inactivity Watchdog: If treadmill was moving but no packet received for > 4.5 seconds
-    // (e.g. user pressed physical Stop on machine console or safety clip was pulled),
-    // halt speed to stop timer from running away and allow auto-save to trigger cleanly.
+    const isForeground = typeof document === 'undefined' || !document.hidden;
+
+    // Foreground-only Inactivity Watchdog:
+    // On iOS/iPadOS (Bluefy), locking the screen or backgrounding suspends BLE notifications.
+    // Only count silence when the app is actively in the foreground AND JS timers are running normally (deltaMs < 2500).
     if (
       this.status === 'connected' &&
       this.protocol !== 'Simulation' &&
       this.metrics.speedKmh > 0.1 &&
+      isForeground &&
+      deltaMs < 2500 &&
       this.lastPacketTimestamp > 0 &&
-      (now - this.lastPacketTimestamp > 4500)
+      (now - this.lastPacketTimestamp > 2000)
     ) {
-      this.metrics.speedKmh = 0;
-      this.addLog('SYS', this.protocol, '', 'ไม่ได้รับสัญญาณจากลู่วิ่งเกิน 4.5 วินาที (สายพานหยุด) ปรับความเร็วเป็น 0 เพื่อหยุดเวลาอัตโนมัติ');
-      if (this.onDataCallback) {
-        this.onDataCallback({ ...this.metrics, speedKmh: 0 });
+      this.silentForegroundTicks += 1;
+      if (this.silentForegroundTicks >= 10) {
+        this.silentForegroundTicks = 0;
+        this.metrics.speedKmh = 0;
+        this.addLog('SYS', this.protocol, '', 'ไม่ได้รับสัญญาณจากลู่วิ่งขณะเปิดหน้าจอเกิน 10 วินาที (สายพานหยุด) ปรับความเร็วเป็น 0 เพื่อหยุดเวลาอัตโนมัติ');
+        if (this.onDataCallback) {
+          this.onDataCallback({ ...this.metrics, speedKmh: 0 });
+        }
+        return;
       }
-      return;
+    } else {
+      this.silentForegroundTicks = 0;
     }
 
     // Safety guard: max single jump 3600 seconds (1 hour) to handle mobile screen wake-up safely
